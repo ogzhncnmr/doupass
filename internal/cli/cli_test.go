@@ -225,6 +225,85 @@ func TestDecideCommandFromInputFile(t *testing.T) {
 	}
 }
 
+func TestSetupCommand(t *testing.T) {
+	home := os.Getenv("USERPROFILE")
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
+	t.Setenv("AppData", filepath.Join(t.TempDir(), "appdata"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "xdg"))
+
+	cursorDir := filepath.Join(home, ".cursor")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(cursorDir, "mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{"fs":{"command":"npx","args":["-y","server-fs","."]}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	claudeDir := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := run(t, "setup", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "cursor") || !strings.Contains(out, "would wrap") {
+		t.Fatalf("dry-run out = %q", out)
+	}
+	data, _ := os.ReadFile(mcpPath)
+	if strings.Contains(string(data), "doupass") {
+		t.Fatal("dry-run modified the cursor config")
+	}
+
+	out, _, err = run(t, "setup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "wrapped 1 MCP server") {
+		t.Fatalf("setup out = %q", out)
+	}
+	data, _ = os.ReadFile(mcpPath)
+	if !strings.Contains(string(data), "doupass") {
+		t.Fatal("cursor config was not wrapped")
+	}
+	settings, _ := os.ReadFile(settingsPath)
+	if !strings.Contains(string(settings), "doupass hook") {
+		t.Fatal("claude hook was not installed")
+	}
+}
+
+func TestInstallAndUninstallGeneric(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "mcp.json")
+	if err := os.WriteFile(cfg, []byte(`{"mcpServers":{"fs":{"command":"npx","args":["-y","x"]}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "install", "generic", "--config", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "wrapped 1 MCP server") {
+		t.Fatalf("out = %q", out)
+	}
+	out, _, err = run(t, "uninstall", "generic", "--config", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "unwrapped 1 MCP server") {
+		t.Fatalf("out = %q", out)
+	}
+	data, _ := os.ReadFile(cfg)
+	if strings.Contains(string(data), "doupass") {
+		t.Fatalf("config not restored: %s", data)
+	}
+}
+
 func TestInstallAndUninstallClaude(t *testing.T) {
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	out, _, err := run(t, "install", "claude", "--settings", settings)

@@ -19,6 +19,8 @@ doupass init                                                  # starter preset (
 doupass init --preset locked-down                             # or: minimal, locked-down, red-team
 doupass policy lint doupass.yml                               # catch blanket rules and missing reasons
 doupass policy test doupass.yml --tool Read --arg file_path=~/.ssh/id_rsa
+doupass setup --dry-run                                       # see which installed tools would be wired
+doupass setup                                                 # wire Claude Code, opencode, Cursor, Windsurf, Kiro, Cline, Roo Code
 doupass install claude                                        # registers the PreToolUse hook
 doupass proxy --server fs -- npx -y @modelcontextprotocol/server-filesystem .
 doupass log tail
@@ -58,6 +60,8 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 
 ## What works today
 
+- `doupass setup` — detect installed agent tools and wire them in one command (dry-run supported).
+- `doupass install generic --config <file>` — wrap MCP servers in any `mcpServers`-style JSON config.
 - `doupass policy test` — validate a policy; evaluate a single call.
 - `doupass policy lint` — detect duplicate rules, blanket patterns, and missing reasons.
 - `doupass init --preset` — starter, minimal, locked-down, and red-team policies.

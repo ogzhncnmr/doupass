@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/ogzhncnmr/doupass/internal/claude"
+	"github.com/ogzhncnmr/doupass/internal/mcpjson"
 	"github.com/ogzhncnmr/doupass/internal/opencode"
 	"github.com/spf13/cobra"
 )
@@ -16,7 +17,7 @@ func newInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "Install harness integrations",
 	}
-	cmd.AddCommand(newInstallClaudeCmd(), newInstallOpenCodeCmd())
+	cmd.AddCommand(newInstallClaudeCmd(), newInstallOpenCodeCmd(), newInstallGenericCmd())
 	return cmd
 }
 
@@ -25,7 +26,62 @@ func newUninstallCmd() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove harness integrations",
 	}
-	cmd.AddCommand(newUninstallClaudeCmd(), newUninstallOpenCodeCmd())
+	cmd.AddCommand(newUninstallClaudeCmd(), newUninstallOpenCodeCmd(), newUninstallGenericCmd())
+	return cmd
+}
+
+func newInstallGenericCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "generic",
+		Short: "Wrap local MCP servers in any mcpServers-style JSON config",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			config, _ := cmd.Flags().GetString("config")
+			if config == "" {
+				return errors.New("--config is required")
+			}
+			res, err := mcpjson.WrapServers(expandHome(config))
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "wrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+				if res.Backup != "" {
+					fmt.Fprintf(out, "backup: %s\n", res.Backup)
+				}
+			} else {
+				fmt.Fprintf(out, "nothing to wrap in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "path to an mcpServers-style JSON config file (required)")
+	return cmd
+}
+
+func newUninstallGenericCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "generic",
+		Short: "Unwrap doupass-wrapped MCP servers in any mcpServers-style JSON config",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			config, _ := cmd.Flags().GetString("config")
+			if config == "" {
+				return errors.New("--config is required")
+			}
+			res, err := mcpjson.UnwrapServers(expandHome(config))
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "unwrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+			} else {
+				fmt.Fprintf(out, "no doupass-wrapped servers found in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "path to an mcpServers-style JSON config file (required)")
 	return cmd
 }
 
@@ -89,7 +145,7 @@ func newUninstallClaudeCmd() *cobra.Command {
 func newInstallOpenCodeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "opencode",
-		Short: "Wrap local MCP servers in the opencode config with the doupass proxy",
+		Short: "Wrap local MCP servers or install the native-tool plugin for opencode",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withPlugin, _ := cmd.Flags().GetBool("plugin")
 			if withPlugin {

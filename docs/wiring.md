@@ -5,6 +5,15 @@ doupass enforces policy on two surfaces:
 - **MCP proxy** — wraps an MCP server command; every `tools/call` is evaluated before it reaches the server.
 - **Hooks** — the harness asks doupass before running a native tool (Bash, Read, Write, Edit).
 
+The fastest way to wire everything that is installed on your machine:
+
+```sh
+doupass setup --dry-run    # show what would change
+doupass setup              # apply; backups are written next to every config file
+```
+
+`setup` detects Claude Code, opencode, Cursor, Windsurf, Kiro, Cline, and Roo Code, and wraps their MCP servers. Native-tool hooks are available for Claude Code and opencode today; everything else gets MCP proxying.
+
 ## Claude Code
 
 Automatic:
@@ -114,6 +123,28 @@ Cursor MCP servers are configured in `~/.cursor/mcp.json`:
 ```
 
 Cursor does not expose an external pre-tool command hook, so doupass enforces MCP traffic only.
+
+## Cursor, Windsurf, Kiro, Cline, Roo Code (mcpServers-style clients)
+
+`doupass setup` handles the known locations automatically. For anything else — or a custom path — use the generic installer, which works on any config with an `mcpServers` object:
+
+```sh
+doupass install generic --config "~/.cursor/mcp.json"
+doupass install generic --config "%APPDATA%/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+doupass uninstall generic --config "~/.cursor/mcp.json"
+```
+
+Locations `setup` checks:
+
+| Tool | Path |
+|---|---|
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Kiro | `~/.kiro/settings/mcp.json` |
+| Cline (VS Code/Cursor/Windsurf) | `<config>/<App>/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
+| Roo Code (VS Code/Cursor/Windsurf) | `<config>/<App>/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json` |
+
+Comments are preserved, `env` blocks are untouched, and a `.doupass.bak` backup is written before every change. For Cline/Roo/Cursor/Kiro, MCP traffic is enforced; their native file/shell tools are not intercepted yet — watch [issue #3](https://github.com/ogzhncnmr/doupass/issues/3).
 
 ## Custom integrations
 
