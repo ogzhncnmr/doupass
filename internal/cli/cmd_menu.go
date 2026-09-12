@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,67 +34,137 @@ var landingChoices = []landingChoice{
 	{Label: "Quit", Quit: true},
 }
 
+var landingIcons = map[string]string{
+	"Show status":           "●",
+	"Preview setup":         "◐",
+	"Apply setup":           "✚",
+	"Create a policy":       "✎",
+	"Recent agent activity": "↻",
+	"Verify audit log":      "✔",
+	"Full help":             "≡",
+	"Quit":                  "×",
+}
+
+const landingAccent = lipgloss.Color("#38BDF8")
+
+var (
+	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(landingAccent)
+	iconStyle   = lipgloss.NewStyle().Foreground(landingAccent)
+	chipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(landingAccent).Padding(0, 1)
+	warnChip    = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("#F87171")).Padding(0, 1)
+	frameStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(landingAccent).Padding(1, 2)
+	footerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	willStyle   = lipgloss.NewStyle().Bold(true).Foreground(landingAccent)
+)
+
+type landingInfo struct {
+	PolicyName   string
+	Rules        int
+	Found        bool
+	Invalid      bool
+	Integrations int
+}
+
 type landingModel struct {
 	choices []landingChoice
 	cursor  int
-	status  string
+	info    landingInfo
+	width   int
 	chosen  []string
 	quit    bool
 }
 
-func newLandingModel(status string) landingModel {
-	return landingModel{choices: landingChoices, status: status}
+func newLandingModel() landingModel {
+	return landingModel{choices: landingChoices, info: landingInfoData()}
 }
 
 func (m landingModel) Init() tea.Cmd { return nil }
 
 func (m landingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
-	}
-	switch key.String() {
-	case "up", "k":
-		m.cursor = (m.cursor + len(m.choices) - 1) % len(m.choices)
-	case "down", "j":
-		m.cursor = (m.cursor + 1) % len(m.choices)
-	case "enter":
-		choice := m.choices[m.cursor]
-		if choice.Quit {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			m.cursor = (m.cursor + len(m.choices) - 1) % len(m.choices)
+		case "down", "j":
+			m.cursor = (m.cursor + 1) % len(m.choices)
+		case "enter":
+			choice := m.choices[m.cursor]
+			if choice.Quit {
+				m.quit = true
+				return m, tea.Quit
+			}
+			m.chosen = choice.Args
+			return m, tea.Quit
+		case "q", "esc", "ctrl+c":
 			m.quit = true
 			return m, tea.Quit
 		}
-		m.chosen = choice.Args
-		return m, tea.Quit
-	case "q", "esc", "ctrl+c":
-		m.quit = true
-		return m, tea.Quit
 	}
 	return m, nil
 }
 
 func (m landingModel) View() string {
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	selected := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	pointer := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	labelWidth := 0
+	for _, c := range m.choices {
+		if n := utf8.RuneCountInString(c.Label); n > labelWidth {
+			labelWidth = n
+		}
+	}
+	labelWidth++
+
+	plain := make([]string, len(m.choices))
+	rowWidth := 0
+	for i, c := range m.choices {
+		plain[i] = " " + landingIcons[c.Label] + " " + padRight(c.Label, labelWidth) + "  " + c.Description
+		if n := utf8.RuneCountInString(plain[i]); n > rowWidth {
+			rowWidth = n
+		}
+	}
+	highlight := lipgloss.NewStyle().Background(landingAccent).Foreground(lipgloss.Color("16")).Bold(true).Width(rowWidth)
 
 	var b strings.Builder
-	b.WriteString("\n  " + title.Render("doupass") + dim.Render("  —  policy guard for AI coding agents") + "\n")
-	b.WriteString("  " + dim.Render(m.status) + "\n\n")
+	b.WriteString(titleStyle.Render("doupass"))
+	b.WriteString(dimStyle.Render("  policy guard for AI coding agents"))
+	b.WriteString("\n")
+	b.WriteString(m.chips())
+	b.WriteString("\n\n")
 	for i, c := range m.choices {
-		prefix := "    "
-		label := fmt.Sprintf("%-24s", c.Label)
-		desc := dim.Render(c.Description)
 		if i == m.cursor {
-			prefix = pointer.Render("  ▸ ")
-			label = selected.Render(label)
-			desc = c.Description
+			b.WriteString(highlight.Render(strings.TrimLeft(plain[i], " ")))
+		} else {
+			b.WriteString(" " + iconStyle.Render(landingIcons[c.Label]) + " " + padRight(c.Label, labelWidth) + "  " + dimStyle.Render(c.Description))
 		}
-		b.WriteString("  " + prefix + label + " " + desc + "\n")
+		b.WriteString("\n")
 	}
-	b.WriteString("\n  " + dim.Render("↑/↓ move  •  enter select  •  q quit") + "\n")
-	return b.String()
+	if !m.choices[m.cursor].Quit {
+		b.WriteString("\n " + dimStyle.Render("▶ will run: ") + willStyle.Render("doupass "+strings.Join(m.choices[m.cursor].Args, " ")) + "\n")
+	}
+	return "\n" + frameStyle.Render(b.String()) + "\n" + footerStyle.Render("  ↑/↓ move  ·  enter select  ·  q quit") + "\n"
+}
+
+func (m landingModel) chips() string {
+	if m.info.Invalid {
+		return " " + warnChip.Render(" policy invalid ")
+	}
+	if !m.info.Found {
+		return " " + warnChip.Render(" policy not found ")
+	}
+	parts := []string{
+		chipStyle.Render(fmt.Sprintf(" policy · %s · %d rules ", m.info.PolicyName, m.info.Rules)),
+		chipStyle.Render(fmt.Sprintf(" integrations · %d ", m.info.Integrations)),
+	}
+	return " " + strings.Join(parts, " ")
+}
+
+func padRight(s string, n int) string {
+	if w := utf8.RuneCountInString(s); w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return s
 }
 
 func runLanding(cmd *cobra.Command) error {
@@ -105,7 +176,7 @@ func runLanding(cmd *cobra.Command) error {
 		return nil
 	}
 	program := tea.NewProgram(
-		newLandingModel(landingStatus()),
+		newLandingModel(),
 		tea.WithInput(in),
 		tea.WithOutput(out),
 		tea.WithAltScreen(),
@@ -172,29 +243,27 @@ In a terminal, run 'doupass' with no arguments for an interactive menu.
 `)
 }
 
-func landingStatus() string {
-	var parts []string
+func landingInfoData() landingInfo {
+	info := landingInfo{}
 	if path, err := findPolicyFile(""); err == nil {
+		info.Found = true
 		if engine, err := loadEngine(path); err == nil {
-			parts = append(parts, fmt.Sprintf("policy %s (%d rules)", engine.Policy.Name, len(engine.Policy.Rules)))
+			info.PolicyName = engine.Policy.Name
+			info.Rules = len(engine.Policy.Rules)
 		} else {
-			parts = append(parts, "policy invalid")
+			info.Invalid = true
 		}
-	} else {
-		parts = append(parts, "policy not found")
 	}
-	count := 0
 	if claude.HasHook(filepath.Join(homeDir(), ".claude", "settings.json")) {
-		count++
+		info.Integrations++
 	}
 	if opencode.PluginInstalled(filepath.Join(homeDir(), ".config", "opencode", "plugin", "doupass.js")) {
-		count++
+		info.Integrations++
 	}
 	for _, tgt := range setupTargets() {
 		if tgt.Kind == "mcpjson" && fileContains(tgt.Path, `"doupass"`) && fileContains(tgt.Path, `"proxy"`) {
-			count++
+			info.Integrations++
 		}
 	}
-	parts = append(parts, fmt.Sprintf("%d integrations", count))
-	return strings.Join(parts, "  ·  ")
+	return info
 }

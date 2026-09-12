@@ -356,7 +356,7 @@ func TestLandingStaticWithoutTerminal(t *testing.T) {
 }
 
 func TestLandingMenuModel(t *testing.T) {
-	m := newLandingModel("test status")
+	m := newLandingModel()
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(landingModel)
 	if m.cursor != 1 {
@@ -368,7 +368,7 @@ func TestLandingMenuModel(t *testing.T) {
 		t.Fatalf("chosen = %v, want [setup --dry-run]", m.chosen)
 	}
 
-	wrapped := newLandingModel("")
+	wrapped := newLandingModel()
 	updated, _ = wrapped.Update(tea.KeyMsg{Type: tea.KeyUp})
 	wrapped = updated.(landingModel)
 	if wrapped.cursor != len(landingChoices)-1 {
@@ -383,10 +383,14 @@ func TestLandingMenuModel(t *testing.T) {
 		t.Fatal("quitting should not choose a command")
 	}
 
-	view := newLandingModel("policy starter (18 rules)").View()
-	if !strings.Contains(view, "Show status") || !strings.Contains(view, "policy starter") {
-		t.Fatalf("view missing content:\n%s", view)
+	model := landingModel{choices: landingChoices, info: landingInfo{PolicyName: "starter", Rules: 18, Found: true, Integrations: 2}}
+	view := model.View()
+	for _, want := range []string{"Show status", "will run:", "doupass", "▶", "18", "integrations"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view missing %q:\n%s", want, view)
+		}
 	}
+	t.Logf("\n%s", view)
 }
 
 func TestPolicyCommandsExpandHome(t *testing.T) {
