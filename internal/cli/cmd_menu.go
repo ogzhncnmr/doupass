@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,7 +32,7 @@ var landingChoices = []landingChoice{
 	{Label: "Show status", Description: "Policy, audit log, and integrations at a glance", Args: []string{"doctor"}},
 	{Label: "Preview setup", Description: "See what would be wired, touch nothing", Args: []string{"setup", "--dry-run"}},
 	{Label: "Apply setup", Description: "Wire the tools installed on this machine", Args: []string{"setup"}},
-	{Label: "Create a policy", Description: "Write a starter doupass.yml in this directory", Args: []string{"init"}},
+	{Label: "Create a policy", Description: "Pick a ready-made doupass.yml, zero writing", Args: nil},
 	{Label: "Recent agent activity", Description: "Last 20 audit entries", Args: []string{"log", "tail"}},
 	{Label: "Verify audit log", Description: "Check the hash chain for tampering", Args: []string{"log", "verify"}},
 	{Label: "Full help", Description: "Every command and flag", Args: []string{"help"}},
@@ -47,6 +48,27 @@ var landingIcons = map[string]string{
 	"Verify audit log":      "✔",
 	"Full help":             "≡",
 	"Quit":                  "×",
+}
+
+type landingScreen int
+
+const (
+	screenMenu landingScreen = iota
+	screenPreset
+	screenRunning
+	screenOutput
+)
+
+type presetOption struct {
+	Name        string
+	Description string
+}
+
+var presetOptions = []presetOption{
+	{"starter", "block credential files, ask before risky commands, normal work stays allowed"},
+	{"minimal", "only the highest-value credential denies, everything else allowed"},
+	{"locked-down", "deny by default, explicitly allow what you trust"},
+	{"red-team", "permissive but logs exfiltration patterns for review"},
 }
 
 type landingInfo struct {
@@ -69,8 +91,16 @@ type landingModel struct {
 	cursor  int
 	info    landingInfo
 	width   int
-	chosen  []string
-	quit    bool
+	height  int
+
+	screen    landingScreen
+	presetIdx int
+	runTitle  string
+	runID     int
+	spinner   int
+	output    []string
+	runErr    string
+	scroll    int
 }
 
 func newLandingModel() landingModel {
@@ -79,33 +109,184 @@ func newLandingModel() landingModel {
 
 func (m landingModel) Init() tea.Cmd { return nil }
 
+type spinnerMsg struct{}
+type runFinishedMsg struct {
+	id     int
+	output string
+	errTxt string
+}
+
+func spinnerTick() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return spinnerMsg{} })
+}
+
+// runLandingCommand executes a doupass command in the background while the
+// menu keeps rendering, and delivers everything it printed as one message.
+func runLandingCommand(id int, args []string) tea.Cmd {
+	return func() tea.Msg {
+		var out, errOut bytes.Buffer
+		execErr := Execute(args, strings.NewReader(""), &out, &errOut)
+		text := strings.TrimRight(out.String(), "\n")
+		errTxt := ""
+		if execErr != nil {
+			if s := strings.TrimSpace(errOut.String()); s != "" {
+				text += "\n\n" + s
+			}
+			errTxt = execErr.Error()
+		}
+		return runFinishedMsg{id: id, output: text, errTxt: errTxt}
+	}
+}
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 func (m landingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
+		m.width, m.height = msg.Width, msg.Height
+	case spinnerMsg:
+		if m.screen == screenRunning {
+			m.spinner++
+			return m, spinnerTick()
+		}
+	case runFinishedMsg:
+		if msg.id != m.runID {
+			return m, nil
+		}
+		m.output = splitLines(msg.output)
+		m.runErr = msg.errTxt
+		m.scroll = 0
+		m.screen = screenOutput
+		m.info = landingInfoData()
+		return m, nil
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "up", "k":
-			m.cursor = (m.cursor + len(m.choices) - 1) % len(m.choices)
-		case "down", "j":
-			m.cursor = (m.cursor + 1) % len(m.choices)
-		case "enter":
-			choice := m.choices[m.cursor]
-			if choice.Quit {
-				m.quit = true
+		switch m.screen {
+		case screenMenu:
+			return m.updateMenu(msg)
+		case screenPreset:
+			return m.updatePreset(msg)
+		case screenRunning:
+			switch msg.String() {
+			case "ctrl+c":
 				return m, tea.Quit
 			}
-			m.chosen = choice.Args
-			return m, tea.Quit
-		case "q", "esc", "ctrl+c":
-			m.quit = true
-			return m, tea.Quit
+		case screenOutput:
+			switch msg.String() {
+			case "enter", "esc", "q":
+				m.screen = screenMenu
+				return m, nil
+			case "up", "k":
+				m.scrollBy(-1)
+			case "down", "j":
+				m.scrollBy(1)
+			case "pgup":
+				m.scrollBy(-m.outputWindow() + 1)
+			case "pgdown":
+				m.scrollBy(m.outputWindow() - 1)
+			case "home":
+				m.scroll = 0
+			case "end":
+				m.scroll = 1 << 30
+				m.clampScroll()
+			case "ctrl+c":
+				return m, tea.Quit
+			}
 		}
 	}
 	return m, nil
 }
 
+func (m landingModel) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		m.cursor = (m.cursor + len(m.choices) - 1) % len(m.choices)
+	case "down", "j":
+		m.cursor = (m.cursor + 1) % len(m.choices)
+	case "enter":
+		choice := m.choices[m.cursor]
+		if choice.Quit {
+			return m, tea.Quit
+		}
+		if choice.Label == "Create a policy" {
+			m.screen = screenPreset
+			m.presetIdx = 0
+			return m, nil
+		}
+		return m.startRun(choice.Args)
+	case "q", "esc", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m landingModel) updatePreset(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		m.presetIdx = (m.presetIdx + len(presetOptions) - 1) % len(presetOptions)
+	case "down", "j":
+		m.presetIdx = (m.presetIdx + 1) % len(presetOptions)
+	case "enter":
+		return m.startRun([]string{"init", "--preset", presetOptions[m.presetIdx].Name})
+	case "esc", "q":
+		m.screen = screenMenu
+	}
+	return m, nil
+}
+
+func (m *landingModel) startRun(args []string) (tea.Model, tea.Cmd) {
+	m.runID++
+	m.runTitle = "doupass " + strings.Join(args, " ")
+	m.screen = screenRunning
+	return *m, tea.Batch(runLandingCommand(m.runID, args), spinnerTick())
+}
+
+func (m *landingModel) outputWindow() int {
+	h := m.height - 12
+	if h < 6 {
+		h = 6
+	}
+	return h
+}
+
+func (m *landingModel) scrollBy(delta int) {
+	m.scroll += delta
+	m.clampScroll()
+}
+
+func (m *landingModel) clampScroll() {
+	max := len(m.output) - m.outputWindow()
+	if max < 0 {
+		max = 0
+	}
+	if m.scroll > max {
+		m.scroll = max
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+}
+
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
+}
+
 func (m landingModel) View() string {
+	switch m.screen {
+	case screenPreset:
+		return m.presetView()
+	case screenRunning:
+		return m.runningView()
+	case screenOutput:
+		return m.outputView()
+	default:
+		return m.menuView()
+	}
+}
+
+func (m landingModel) menuView() string {
 	labelWidth := 0
 	for _, c := range m.choices {
 		if n := utf8.RuneCountInString(c.Label); n > labelWidth {
@@ -150,7 +331,85 @@ func (m landingModel) View() string {
 		lines = append(lines, "", " "+dimStyle.Render("▶ will run: ")+willStyle.Render("doupass "+strings.Join(m.choices[m.cursor].Args, " ")))
 	}
 
-	inner := rowWidth
+	return framed(lines, rowWidth, "  ↑/↓ move  ·  enter run  ·  q quit")
+}
+
+func (m landingModel) presetView() string {
+	rowWidth := len("Choose a ready-made policy") + 4
+	highlight := lipgloss.NewStyle().Background(landingAccent).Foreground(lipgloss.Color("16")).Bold(true)
+
+	lines := []string{
+		titleStyle.Render("◆ doupass") + dimStyle.Render(" · choose a ready-made policy"),
+		dividerMark,
+	}
+	for i, p := range presetOptions {
+		row := fmt.Sprintf(" %d. %-11s %s", i+1, p.Name, p.Description)
+		rowWidth = max(rowWidth, utf8.RuneCountInString(row))
+		if i == m.presetIdx {
+			lines = append(lines, " "+highlight.Render(strings.TrimSpace(row)))
+		} else {
+			lines = append(lines, " "+padRight(p.Name, 11)+dimStyle.Render("  "+p.Description))
+		}
+	}
+	lines = append(lines, "", " "+dimStyle.Render("▶ will run: ")+willStyle.Render("doupass init --preset "+presetOptions[m.presetIdx].Name))
+	return framed(lines, rowWidth, "  ↑/↓ move  ·  enter write policy  ·  esc back")
+}
+
+func (m landingModel) runningView() string {
+	spinner := willStyle.Render(spinnerFrames[m.spinner%len(spinnerFrames)])
+	lines := []string{
+		titleStyle.Render("◆ doupass") + dimStyle.Render(" · working"),
+		dividerMark,
+		"",
+		" " + spinner + " running " + willStyle.Render(m.runTitle) + dimStyle.Render(" …"),
+		"",
+		" " + dimStyle.Render("the result appears here; the menu never goes away"),
+	}
+	return framed(lines, lipgloss.Width("running "+m.runTitle+" …")+8, "")
+}
+
+func (m landingModel) outputView() string {
+	width := 0
+	for _, l := range m.output {
+		if n := utf8.RuneCountInString(l); n > width {
+			width = n
+		}
+	}
+	if width < len(m.runTitle)+4 {
+		width = len(m.runTitle) + 4
+	}
+
+	lines := []string{
+		titleStyle.Render("◆ " + m.runTitle),
+		dividerMark,
+	}
+	window := m.outputWindow()
+	total := len(m.output)
+	start := m.scroll
+	if start > total {
+		start = total
+	}
+	end := start + window
+	if end > total {
+		end = total
+	}
+	lines = append(lines, m.output[start:end]...)
+	if total > window {
+		pos := dimStyle.Render(fmt.Sprintf("  · %d-%d / %d lines  (↑/↓ scroll)", start+1, end, total))
+		lines = append(lines, "", pos)
+	}
+	if m.runErr != "" {
+		lines = append(lines, failStyle.Render("✗ "+m.runErr))
+	}
+	return framed(lines, width, "  ↑/↓ scroll  ·  enter back to menu")
+}
+
+const dividerMark = "\x00divider\x00"
+
+// framed renders the lines inside the landing frame with dim dividers kept
+// as wide as the widest content line; an empty footer omits the hint line.
+func framed(lines []string, width int, footer string) string {
+	inner := width
 	for _, l := range lines {
 		if l == dividerMark {
 			continue
@@ -164,16 +423,17 @@ func (m landingModel) View() string {
 			lines[i] = dimStyle.Render(strings.Repeat("─", inner))
 		}
 	}
-
 	var b strings.Builder
 	for _, l := range lines {
 		b.WriteString(l)
 		b.WriteString("\n")
 	}
-	return "\n" + frameStyle.Render(b.String()) + "\n" + footerStyle.Render("  ↑/↓ move  ·  enter run  ·  q quit") + "\n"
+	out := "\n" + frameStyle.Render(b.String()) + "\n"
+	if footer != "" {
+		out += footerStyle.Render(footer) + "\n"
+	}
+	return out
 }
-
-const dividerMark = "\x00divider\x00"
 
 func (m landingModel) statusRows() []string {
 	line := func(label, value string) string {
@@ -216,91 +476,18 @@ func (m landingModel) statusRows() []string {
 func runLanding(cmd *cobra.Command) error {
 	in := cmd.InOrStdin()
 	out := cmd.OutOrStdout()
-	errOut := cmd.ErrOrStderr()
 	if !isInteractiveTerminal(in, out) {
 		printStaticLanding(out)
 		return nil
 	}
-	for {
-		choice, quit, err := selectLanding(in, out)
-		if err != nil || quit {
-			return err
-		}
-		args := choice
-		if choice[0] == "init" {
-			preset, ok := choosePreset(in, out)
-			if !ok {
-				continue
-			}
-			args = []string{"init", "--preset", preset}
-		}
-		fmt.Fprintf(out, "\n%s %s\n\n", iconStyle.Render("◆"), willStyle.Render("doupass "+strings.Join(args, " ")))
-		if err := Execute(args, in, out, errOut); err != nil {
-			fmt.Fprintf(errOut, "%s\n", failStyle.Render("✗ "+err.Error()))
-		}
-		pauseForReturn(in, out)
-	}
-}
-
-type presetOption struct {
-	Name        string
-	Description string
-}
-
-var presetOptions = []presetOption{
-	{"starter", "block credential files, ask before risky commands, normal work stays allowed"},
-	{"minimal", "only the highest-value credential denies, everything else allowed"},
-	{"locked-down", "deny by default, explicitly allow what you trust"},
-	{"red-team", "permissive but logs exfiltration patterns for review"},
-}
-
-func choosePreset(in io.Reader, out io.Writer) (string, bool) {
-	fmt.Fprintln(out, "Choose a ready-made policy:")
-	for i, p := range presetOptions {
-		fmt.Fprintf(out, "  %d. %-11s %s\n", i+1, p.Name, dimStyle.Render(p.Description))
-	}
-	fmt.Fprint(out, "\npreset [1-4, enter = starter, q = cancel]: ")
-	line, err := bufio.NewReader(in).ReadString('\n')
-	if err != nil && line == "" {
-		return "", false
-	}
-	switch strings.TrimSpace(strings.ToLower(line)) {
-	case "", "1", "starter":
-		return "starter", true
-	case "2", "minimal":
-		return "minimal", true
-	case "3", "locked-down", "lockeddown":
-		return "locked-down", true
-	case "4", "red-team", "redteam":
-		return "red-team", true
-	default:
-		fmt.Fprintf(out, "%s unknown preset — back to the menu\n", failStyle.Render("✗"))
-		return "", false
-	}
-}
-
-func selectLanding(in io.Reader, out io.Writer) ([]string, bool, error) {
 	program := tea.NewProgram(
 		newLandingModel(),
 		tea.WithInput(in),
 		tea.WithOutput(out),
 		tea.WithAltScreen(),
 	)
-	final, err := program.Run()
-	if err != nil {
-		return nil, false, err
-	}
-	m, ok := final.(landingModel)
-	if !ok || m.quit || len(m.chosen) == 0 {
-		return nil, true, nil
-	}
-	return m.chosen, false, nil
-}
-
-func pauseForReturn(in io.Reader, out io.Writer) {
-	fmt.Fprint(out, dimStyle.Render("\npress Enter to return to the menu…"))
-	r := bufio.NewReader(in)
-	_, _ = r.ReadString('\n')
+	_, err := program.Run()
+	return err
 }
 
 func isInteractiveTerminal(in io.Reader, out io.Writer) bool {

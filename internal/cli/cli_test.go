@@ -362,10 +362,13 @@ func TestLandingMenuModel(t *testing.T) {
 	if m.cursor != 1 {
 		t.Fatalf("cursor = %d, want 1", m.cursor)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(landingModel)
-	if len(m.chosen) != 2 || m.chosen[0] != "setup" || m.chosen[1] != "--dry-run" {
-		t.Fatalf("chosen = %v, want [setup --dry-run]", m.chosen)
+	if m.screen != screenRunning || m.runTitle != "doupass setup --dry-run" {
+		t.Fatalf("enter should start the run in-place, got screen=%d title=%q", m.screen, m.runTitle)
+	}
+	if cmd == nil {
+		t.Fatal("enter should kick off the background command")
 	}
 
 	wrapped := newLandingModel()
@@ -374,13 +377,22 @@ func TestLandingMenuModel(t *testing.T) {
 	if wrapped.cursor != len(landingChoices)-1 {
 		t.Fatalf("wrap-around cursor = %d, want %d", wrapped.cursor, len(landingChoices)-1)
 	}
-	updated, _ = wrapped.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	updated, quitCmd := wrapped.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	wrapped = updated.(landingModel)
-	if !wrapped.quit {
-		t.Fatal("q should quit")
+	if quitCmd == nil {
+		t.Fatal("q should request program exit")
 	}
-	if wrapped.chosen != nil {
-		t.Fatal("quitting should not choose a command")
+
+	finished := m
+	updated, _ = finished.Update(runFinishedMsg{id: finished.runID, output: "doupass setup — dry run\n\n  + cursor", errTxt: ""})
+	finished = updated.(landingModel)
+	if finished.screen != screenOutput || len(finished.output) != 3 {
+		t.Fatalf("runFinishedMsg should show the output panel, got screen=%d lines=%d", finished.screen, len(finished.output))
+	}
+	updated, _ = finished.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	finished = updated.(landingModel)
+	if finished.screen != screenMenu {
+		t.Fatalf("enter should return to the menu, got screen=%d", finished.screen)
 	}
 
 	model := landingModel{choices: landingChoices, info: landingInfo{PolicyName: "starter", Rules: 18, Found: true, Integrations: 2}}
@@ -391,6 +403,29 @@ func TestLandingMenuModel(t *testing.T) {
 		}
 	}
 	t.Logf("\n%s", view)
+}
+
+func TestLandingPresetScreen(t *testing.T) {
+	m := newLandingModel()
+	m.cursor = 3 // Create a policy
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenPreset {
+		t.Fatalf("Create a policy should open the preset picker, got screen=%d", m.screen)
+	}
+	view := m.View()
+	for _, want := range []string{"starter", "minimal", "locked-down", "red-team", "will run:", "esc back"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("preset view missing %q:\n%s", want, view)
+		}
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(landingModel)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenRunning || m.runTitle != "doupass init --preset minimal" {
+		t.Fatalf("preset enter should run init, got screen=%d title=%q", m.screen, m.runTitle)
+	}
 }
 
 func TestLandingStatusRows(t *testing.T) {
@@ -626,27 +661,6 @@ func TestSetupWrapsCodex(t *testing.T) {
 	data, _ = os.ReadFile(cfg)
 	if strings.Contains(string(data), "doupass") {
 		t.Fatalf("codex config not restored:\n%s", data)
-	}
-}
-
-func TestChoosePreset(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-		ok    bool
-	}{
-		{"\n", "starter", true},
-		{"3\n", "locked-down", true},
-		{"red-team\n", "red-team", true},
-		{"q\n", "", false},
-		{"bogus\n", "", false},
-	}
-	for _, tc := range cases {
-		var out bytes.Buffer
-		got, ok := choosePreset(strings.NewReader(tc.input), &out)
-		if got != tc.want || ok != tc.ok {
-			t.Errorf("choosePreset(%q) = %q,%v want %q,%v", tc.input, got, ok, tc.want, tc.ok)
-		}
 	}
 }
 
