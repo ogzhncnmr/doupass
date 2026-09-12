@@ -1,0 +1,2 @@
+go test fuzz v1
+string("re:.*(npm|yarn|pnpm|bun)\\s+(install|i|add)\\b.*|.*(pip3?|gem|cargo|go)\\s+install\\b.*")

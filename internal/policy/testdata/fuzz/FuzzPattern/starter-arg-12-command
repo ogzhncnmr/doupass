@@ -1,0 +1,2 @@
+go test fuzz v1
+string("re:.*git\\s+push\\b.*(--force\\b|--force-with-lease\\b|\\s-f\\b).*")
