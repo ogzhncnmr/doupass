@@ -29,7 +29,7 @@ archives:
       - goos: windows
         formats: [zip]
 
-checksums:
+checksum:
   name_template: checksums.txt
 
 changelog:
