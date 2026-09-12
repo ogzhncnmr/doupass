@@ -1,0 +1,21 @@
+# Binaries
+/doupass
+/doupass.exe
+dist/
+bin/
+
+# Test output
+*.out
+coverage.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
