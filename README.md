@@ -58,6 +58,15 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 - `doupass install|uninstall claude` — idempotent `settings.json` merging with backups.
 - `doupass log tail|verify` — JSONL audit log with a SHA-256 hash chain and sensitive-argument masking.
 
+## Docs
+
+- [Quickstart](docs/quickstart.md)
+- [Wiring harnesses](docs/wiring.md)
+- [Comparison with other agent-security tools](docs/comparison.md)
+- [FAQ](docs/faq.md)
+- [Threat model](docs/threat-model.md)
+- [Policy format specification](spec/policy-v0.md)
+
 ## Non-goals (v0.1)
 
 OS-level sandboxing, malware detection, prompt-injection heuristics, and cross-call taint tracking. Other harnesses' native tools (Codex, OpenCode, Cursor) are not enforced yet. Details in [`docs/threat-model.md`](docs/threat-model.md).
