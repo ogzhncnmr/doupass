@@ -78,7 +78,7 @@ func newDoctorCmd() *cobra.Command {
 					continue
 				}
 				if tgt.Kind == "mcpjson" || tgt.Kind == "opencode" {
-					if fileContains(tgt.Path, "doupass") {
+					if fileContains(tgt.Path, `"doupass"`) && fileContains(tgt.Path, `"proxy"`) {
 						fmt.Fprintf(out, "  %-13s MCP servers wrapped\n", tgt.Name)
 						active++
 					} else {
