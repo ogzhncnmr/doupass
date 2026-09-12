@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,7 +231,7 @@ func acquireLock(path string, wait time.Duration) (func(), error) {
 			_ = f.Close()
 			return func() { _ = os.Remove(lockPath) }, nil
 		}
-		if !os.IsExist(err) {
+		if !os.IsExist(err) && !errors.Is(err, fs.ErrPermission) {
 			return nil, err
 		}
 		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > staleLockAge {
