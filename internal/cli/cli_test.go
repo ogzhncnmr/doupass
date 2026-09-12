@@ -304,6 +304,43 @@ func TestInstallAndUninstallGeneric(t *testing.T) {
 	}
 }
 
+func TestDoctorCommand(t *testing.T) {
+	home := os.Getenv("USERPROFILE")
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
+	dir := filepath.Join(home, ".doupass")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.ReadFile(examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "doupass.yml"), src, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "doctor")
+	if err != nil {
+		t.Fatalf("doctor: %v (out=%s)", err, out)
+	}
+	for _, want := range []string{"policy", "audit", "integrations"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("doctor output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestDoctorReportsMissingPolicy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	_, _, err := run(t, "doctor")
+	if err == nil || !strings.Contains(err.Error(), "problem") {
+		t.Fatalf("expected problems error, got %v", err)
+	}
+}
+
 func TestPolicyCommandsExpandHome(t *testing.T) {
 	home := os.Getenv("USERPROFILE")
 	if home == "" {

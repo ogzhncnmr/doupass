@@ -190,3 +190,11 @@ func hasDoupassHook(settings map[string]any) bool {
 func matchesHook(command string) bool {
 	return strings.Contains(command, hookMarker)
 }
+
+func HasHook(settingsPath string) bool {
+	settings, _, err := readSettings(settingsPath)
+	if err != nil {
+		return false
+	}
+	return hasDoupassHook(settings)
+}

@@ -35,8 +35,19 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "doupass",
-		Short:         "Local-first policy engine for AI coding agents",
+		Use:   "doupass",
+		Short: "Local-first policy engine for AI coding agents",
+		Long: `doupass keeps your AI coding agents inside rules you define.
+
+Every tool call an agent makes — shell commands, file reads, MCP calls — is
+checked against one policy file and recorded in a tamper-evident local audit
+log. Nothing leaves your machine and no model is involved in the decision.
+
+Everyday flow:
+  1. doupass doctor                see the current state
+  2. doupass setup                 wire the tools installed on this machine
+  3. (edit ~/.doupass/doupass.yml) change what agents may do
+  4. doupass log tail              review what agents actually did`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -44,6 +55,7 @@ func NewRootCmd() *cobra.Command {
 		newVersionCmd(),
 		newInitCmd(),
 		newSetupCmd(),
+		newDoctorCmd(),
 		newPolicyCmd(),
 		newProxyCmd(),
 		newLogCmd(),

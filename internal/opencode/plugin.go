@@ -55,6 +55,15 @@ func UninstallPlugin(pluginPath string) (PluginResult, error) {
 	return PluginResult{Path: pluginPath, Changed: true}, nil
 }
 
+func PluginInstalled(pluginPath string) bool {
+	//#nosec G304 -- plugin path is chosen by the local user
+	data, err := os.ReadFile(pluginPath)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), pluginMarker)
+}
+
 func renderPlugin(binary string) string {
 	binaryLiteral := strings.ReplaceAll(binary, `\`, `\\`)
 	binaryLiteral = strings.ReplaceAll(binaryLiteral, `"`, `\"`)
