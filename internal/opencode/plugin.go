@@ -59,6 +59,10 @@ func renderPlugin(binary string) string {
 	binaryLiteral := strings.ReplaceAll(binary, `\`, `\\`)
 	binaryLiteral = strings.ReplaceAll(binaryLiteral, `"`, `\"`)
 	return `// ` + pluginMarker + ` (doupass install opencode --plugin)
+import { writeFileSync, unlinkSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
 const BINARY = "` + binaryLiteral + `"
 
 function canonicalTool(name) {
@@ -85,12 +89,16 @@ export const DoupassPlugin = async ({ $ }) => {
         tool: canonicalTool(input.tool),
         args: normalizeArgs(output.args),
       })
+      const file = join(tmpdir(), "doupass-" + Date.now() + "-" + Math.random().toString(36).slice(2) + ".json")
       let decision
       try {
-        const text = await $` + "`" + `printf '%s' ${payload} | ${BINARY} decide` + "`" + `.quiet().text()
+        writeFileSync(file, payload)
+        const text = await $` + "`" + `${BINARY} decide --input ${file}` + "`" + `.quiet().text()
         decision = JSON.parse(text)
       } catch (err) {
         throw new Error("doupass: policy decision failed (fail-closed): " + err)
+      } finally {
+        try { unlinkSync(file) } catch {}
       }
       if (decision.action === "deny") {
         throw new Error("doupass denied " + input.tool + " by rule " + (decision.rule || "policy") + ": " + (decision.reason || ""))

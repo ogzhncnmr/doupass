@@ -211,6 +211,20 @@ func TestDecideCommandRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestDecideCommandFromInputFile(t *testing.T) {
+	inputPath := filepath.Join(t.TempDir(), "call.json")
+	if err := os.WriteFile(inputPath, []byte(`{"tool":"Read","args":{"file_path":"/home/x/.ssh/id_rsa"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "decide", "--policy", examplePolicy(), "--input", inputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"action":"deny"`) {
+		t.Fatalf("out = %q", out)
+	}
+}
+
 func TestInstallAndUninstallClaude(t *testing.T) {
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	out, _, err := run(t, "install", "claude", "--settings", settings)

@@ -29,6 +29,8 @@ func TestInstallPlugin(t *testing.T) {
 		"canonicalTool",
 		"normalizeArgs",
 		"fail-closed",
+		"decide --input",
+		"node:fs",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("plugin missing %q:\n%s", want, text)

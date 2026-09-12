@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/ogzhncnmr/doupass/internal/policy"
 	"github.com/spf13/cobra"
@@ -19,7 +20,7 @@ type decideInput struct {
 func newDecideCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "decide",
-		Short: "Evaluate one call (JSON on stdin) and print the decision; for custom integrations",
+		Short: "Evaluate one call (JSON on stdin or --input) and print the decision; for custom integrations",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			policyFlag, _ := cmd.Flags().GetString("policy")
 			policyPath, err := findPolicyFile(policyFlag)
@@ -30,7 +31,14 @@ func newDecideCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			data, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), 1<<20))
+			inputPath, _ := cmd.Flags().GetString("input")
+			var data []byte
+			if inputPath != "" {
+				//#nosec G304 -- input path is chosen by the local user
+				data, err = os.ReadFile(inputPath)
+			} else {
+				data, err = io.ReadAll(io.LimitReader(cmd.InOrStdin(), 1<<20))
+			}
 			if err != nil {
 				return err
 			}
@@ -54,5 +62,6 @@ func newDecideCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("policy", "", "policy file (default: ./doupass.yml or ~/.doupass/doupass.yml)")
+	cmd.Flags().String("input", "", "read the call JSON from a file instead of stdin")
 	return cmd
 }
