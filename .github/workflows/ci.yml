@@ -29,3 +29,6 @@ jobs:
       - name: Lint policies
         if: runner.os == 'Linux'
         run: go run ./cmd/doupass policy lint rules/starter.yml rules/packs/*.yml
+      - name: Build wasm
+        if: runner.os == 'Linux'
+        run: GOOS=js GOARCH=wasm go build -o /tmp/doupass.wasm ./cmd/doupass-wasm

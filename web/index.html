@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>doupass policy playground</title>
+<style>
+  :root { --bg:#0e1116; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --allow:#2ea043; --ask:#d29922; --deny:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  header span { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px 24px 8px; max-width:1400px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  section { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:12px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  textarea, input, select { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:8px; font:13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  textarea { resize:vertical; }
+  #policy { min-height:360px; }
+  .row { display:flex; gap:8px; margin-bottom:8px; }
+  .row > * { flex:1; }
+  button { background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  .quick { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+  #result { margin-top:12px; padding:14px; border-radius:8px; border:1px solid var(--border); min-height:86px; }
+  #action { font-size:22px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .allow { color:var(--allow); } .ask { color:var(--ask); } .deny { color:var(--deny); } .error { color:var(--deny); }
+  #meta { color:var(--muted); font:13px ui-monospace, monospace; margin-top:6px; white-space:pre-wrap; }
+  footer { color:var(--muted); font-size:12px; padding:8px 24px 24px; max-width:1400px; margin:0 auto; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>doupass playground</h1>
+  <span>policy format v0 — decisions run locally in WebAssembly; nothing leaves your browser</span>
+</header>
+<main>
+  <section>
+    <h2>Policy</h2>
+    <div class="quick">
+      <button id="load-starter">Load 18-rule starter</button>
+      <button id="reset">Reset</button>
+    </div>
+    <textarea id="policy" spellcheck="false"></textarea>
+  </section>
+  <section>
+    <h2>Call</h2>
+    <div class="row">
+      <select id="surface">
+        <option value="hook">hook (native tool)</option>
+        <option value="mcp">mcp (server tool)</option>
+      </select>
+      <input id="server" placeholder="server (mcp only), e.g. filesystem" />
+    </div>
+    <div class="row">
+      <input id="tool" placeholder="tool, e.g. Bash or Read" />
+    </div>
+    <textarea id="args" rows="4" spellcheck="false" placeholder='args JSON, e.g. {"command": "npm install left-pad"}'></textarea>
+    <div class="quick">
+      <button data-call='{"tool":"Read","args":{"file_path":"~/.ssh/id_rsa"}}'>ssh read</button>
+      <button data-call='{"tool":"Bash","args":{"command":"npm install left-pad"}}'>npm install</button>
+      <button data-call='{"tool":"Bash","args":{"command":"rm -rf /"}}'>rm -rf /</button>
+      <button data-call='{"surface":"mcp","server":"db","tool":"query","args":{"sql":"DROP TABLE users"}}'>DROP TABLE</button>
+      <button data-call='{"tool":"Read","args":{"file_path":"/workspace/README.md"}}'>workspace read</button>
+    </div>
+    <div id="result">
+      <div id="action">—</div>
+      <div id="meta"></div>
+    </div>
+  </section>
+</main>
+<footer>
+  HOME=/home/dev and WORKSPACE=/workspace in this playground. Format reference:
+  <a href="https://github.com/ogzhncnmr/doupass/blob/main/spec/policy-v0.md">spec/policy-v0.md</a>.
+</footer>
+<script src="./wasm_exec.js"></script>
+<script>
+const DEFAULT_POLICY = `version: "0.1"
+name: playground
+
+defaults:
+  action: allow
+  ask_fallback: deny
+
+rules:
+  - id: block-ssh-credentials
+    match:
+      args:
+        "*": "**/.ssh/**"
+    action: deny
+    reason: "SSH credentials are off-limits"
+
+  - id: ask-npm-install
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*npm install*"
+    action: ask
+    reason: "Package installs run lifecycle scripts"
+
+  - id: deny-rm-root
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*rm -rf /*"
+    action: deny
+    reason: "Refusing recursive delete of root paths"
+
+  - id: deny-drop-table
+    match:
+      args:
+        "*": "*DROP TABLE*"
+    action: deny
+    reason: "Destructive SQL is not allowed"
+`;
+
+const policyEl = document.getElementById("policy");
+const surfaceEl = document.getElementById("surface");
+const serverEl = document.getElementById("server");
+const toolEl = document.getElementById("tool");
+const argsEl = document.getElementById("args");
+const actionEl = document.getElementById("action");
+const metaEl = document.getElementById("meta");
+
+let ready = false;
+
+function show(out) {
+  actionEl.className = "";
+  if (out.error) {
+    actionEl.textContent = "error";
+    actionEl.classList.add("error");
+    metaEl.textContent = out.error;
+    return;
+  }
+  actionEl.textContent = out.action;
+  actionEl.classList.add(out.action);
+  const parts = [];
+  if (out.rule) parts.push("rule: " + out.rule);
+  if (out.reason) parts.push("reason: " + out.reason);
+  metaEl.textContent = parts.join("\n");
+}
+
+function buildCall() {
+  const call = { surface: surfaceEl.value, tool: toolEl.value.trim(), args: {} };
+  const server = serverEl.value.trim();
+  if (server) call.server = server;
+  const raw = argsEl.value.trim();
+  if (raw) {
+    call.args = JSON.parse(raw);
+  }
+  return JSON.stringify(call);
+}
+
+function evaluate() {
+  if (!ready) return;
+  let call;
+  try {
+    call = buildCall();
+  } catch (err) {
+    show({ error: "invalid args JSON: " + err.message });
+    return;
+  }
+  try {
+    show(JSON.parse(doupassDecide(policyEl.value, call)));
+  } catch (err) {
+    show({ error: String(err) });
+  }
+}
+
+let timer = null;
+function schedule() {
+  clearTimeout(timer);
+  timer = setTimeout(evaluate, 150);
+}
+
+for (const el of [policyEl, surfaceEl, serverEl, toolEl, argsEl]) {
+  el.addEventListener("input", schedule);
+}
+surfaceEl.addEventListener("change", schedule);
+
+document.querySelectorAll("[data-call]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const call = JSON.parse(btn.dataset.call);
+    surfaceEl.value = call.surface || "hook";
+    serverEl.value = call.server || "";
+    toolEl.value = call.tool || "";
+    argsEl.value = JSON.stringify(call.args || {}, null, 1);
+    evaluate();
+  });
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  policyEl.value = DEFAULT_POLICY;
+  evaluate();
+});
+
+document.getElementById("load-starter").addEventListener("click", async () => {
+  try {
+    const res = await fetch("./starter.yml");
+    policyEl.value = await res.text();
+    evaluate();
+  } catch (err) {
+    show({ error: "could not load starter.yml: " + err });
+  }
+});
+
+policyEl.value = DEFAULT_POLICY;
+argsEl.value = '{\n "file_path": "~/.ssh/id_rsa"\n}';
+toolEl.value = "Read";
+
+const go = new Go();
+WebAssembly.instantiateStreaming(fetch("./doupass.wasm"), go.importObject)
+  .then((res) => {
+    go.run(res.instance);
+    ready = true;
+    evaluate();
+  })
+  .catch((err) => show({ error: "failed to load wasm: " + err }));
+</script>
+</body>
+</html>
