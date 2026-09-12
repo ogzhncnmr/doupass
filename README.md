@@ -27,6 +27,8 @@ doupass log tail
 doupass log verify                                            # hash-chain tamper check
 ```
 
+Run `doupass` with no arguments in a terminal for an interactive menu of the most useful actions (status, setup, policy, audit); piped or non-interactive runs get a plain-text guide instead.
+
 Prebuilt binaries (Linux/macOS/Windows, amd64+arm64) are on the [releases page](https://github.com/ogzhncnmr/doupass/releases); checksums are Sigstore-signed, see `packaging/README.md` for verification commands.
 
 ## Playground
