@@ -1,0 +1,51 @@
+version: "0.1"
+name: ci-safe
+
+defaults:
+  action: deny
+  ask_fallback: deny
+
+audit:
+  path: "~/.doupass/audit.jsonl"
+  hash_chain: true
+
+rules:
+  - id: allow-read-tools
+    match:
+      surface: hook
+      tool: "re:^(Read|Glob|Grep)$"
+    action: allow
+    reason: "Read-only tools are safe in CI"
+
+  - id: allow-test-commands
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "re:^(go test|npm test|npm run test|pytest)\b.*"
+    action: allow
+    reason: "Test commands are expected in CI"
+
+  - id: allow-build-commands
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "re:^(go build|go vet|npm run build)\b.*"
+    action: allow
+    reason: "Build commands are expected in CI"
+
+  - id: deny-network
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*curl*"
+    action: deny
+    reason: "CI jobs must not reach the network through the agent"
+
+  - id: deny-writes
+    match:
+      tool: "re:^(Write|Edit|NotebookEdit)$"
+    action: deny
+    reason: "CI jobs must not write files through the agent"

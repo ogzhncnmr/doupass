@@ -171,6 +171,34 @@ func TestHookClaudeAllowsSilently(t *testing.T) {
 	}
 }
 
+func TestDecideCommand(t *testing.T) {
+	input := `{"surface":"mcp","server":"fs","tool":"read_file","args":{"path":"/home/x/.ssh/id_rsa"}}`
+	out, _, err := runWithStdin(t, input, "decide", "--policy", examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"action":"deny"`) || !strings.Contains(out, "block-ssh-credentials") {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestDecideCommandDefaultsToHookSurface(t *testing.T) {
+	input := `{"tool":"Bash","args":{"command":"npm install x"}}`
+	out, _, err := runWithStdin(t, input, "decide", "--policy", examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"action":"ask"`) || !strings.Contains(out, "ask-npm-install") {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestDecideCommandRejectsInvalidJSON(t *testing.T) {
+	if _, _, err := runWithStdin(t, "not json", "decide", "--policy", examplePolicy()); err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestInstallAndUninstallClaude(t *testing.T) {
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	out, _, err := run(t, "install", "claude", "--settings", settings)
@@ -243,5 +271,41 @@ func TestInstallAndUninstallOpenCode(t *testing.T) {
 	}
 	if strings.Contains(string(data), "doupass") {
 		t.Fatalf("config = %s", data)
+	}
+}
+
+func TestInstallAndUninstallOpenCodePlugin(t *testing.T) {
+	dir := t.TempDir()
+	out, _, err := run(t, "install", "opencode", "--plugin", "--plugin-dir", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "installed native-tool plugin") {
+		t.Fatalf("out = %q", out)
+	}
+	pluginPath := filepath.Join(dir, "doupass.js")
+	data, err := os.ReadFile(pluginPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "tool.execute.before") {
+		t.Fatalf("plugin = %s", data)
+	}
+	out, _, err = run(t, "install", "opencode", "--plugin", "--plugin-dir", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "already installed") {
+		t.Fatalf("out = %q", out)
+	}
+	out, _, err = run(t, "uninstall", "opencode", "--plugin", "--plugin-dir", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "removed plugin") {
+		t.Fatalf("out = %q", out)
+	}
+	if _, err := os.Stat(pluginPath); !os.IsNotExist(err) {
+		t.Fatal("plugin still present")
 	}
 }

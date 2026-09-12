@@ -41,13 +41,22 @@ claude mcp add filesystem -- doupass proxy --server filesystem -- npx -y @modelc
 
 ## OpenCode
 
-Automatic:
+Automatic (MCP proxy):
 
 ```sh
 doupass install opencode                        # finds ./opencode.json[c] or ~/.config/opencode/opencode.json[c]
 doupass install opencode --config ./opencode.jsonc
 doupass uninstall opencode
 ```
+
+Automatic (native tools plugin):
+
+```sh
+doupass install opencode --plugin               # writes .opencode/plugin/doupass.js
+doupass uninstall opencode --plugin
+```
+
+The plugin hooks `tool.execute.before` and asks doupass before every native tool call. Restart opencode after installing. It normalizes tool names (`bash` → `Bash`, `read` → `Read`, `filePath` → `file_path`) so the same policy works across Claude Code and opencode. A `deny` blocks the call with the rule reason; `ask` is fail-closed (blocked with an explanation) because plugins cannot prompt interactively; if doupass itself fails, the plugin fails closed too.
 
 For every `mcp` entry with `"type": "local"`, the command is rewritten to run through the proxy. Comments, other settings, and `environment` blocks are preserved; a `.doupass.bak` backup is written.
 
@@ -87,7 +96,7 @@ command = "doupass"
 args = ["proxy", "--server", "filesystem", "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
 ```
 
-Codex native tool approval (sandbox/approval modes) keeps working alongside; hook-based enforcement for Codex's native tools is on the v0.2 roadmap.
+Codex does not expose an external pre-tool command hook, so doupass enforces MCP traffic only; native-tool approval stays with Codex's own sandbox and approval modes. If a future Codex version adds hooks, an adapter can reuse `doupass decide`.
 
 ## Cursor
 
@@ -104,7 +113,16 @@ Cursor MCP servers are configured in `~/.cursor/mcp.json`:
 }
 ```
 
-Cursor native tool enforcement is on the v0.2 roadmap.
+Cursor does not expose an external pre-tool command hook, so doupass enforces MCP traffic only.
+
+## Custom integrations
+
+Any harness or tool that can run a command can integrate through `doupass decide`: it reads one call as JSON on stdin and prints the decision as JSON, writing the audit entry on the way.
+
+```sh
+echo '{"surface":"hook","tool":"Bash","args":{"command":"npm install x"}}' | doupass decide --policy doupass.yml
+# {"action":"ask","rule":"ask-package-install","reason":"Package installs run lifecycle scripts"}
+```
 
 ## Choosing a policy
 

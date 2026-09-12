@@ -91,6 +91,27 @@ func newInstallOpenCodeCmd() *cobra.Command {
 		Use:   "opencode",
 		Short: "Wrap local MCP servers in the opencode config with the doupass proxy",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			withPlugin, _ := cmd.Flags().GetBool("plugin")
+			if withPlugin {
+				dir, _ := cmd.Flags().GetString("plugin-dir")
+				pluginPath := filepath.Join(dir, "doupass.js")
+				binary, err := os.Executable()
+				if err != nil {
+					binary = "doupass"
+				}
+				res, err := opencode.InstallPlugin(pluginPath, binary)
+				if err != nil {
+					return err
+				}
+				out := cmd.OutOrStdout()
+				if res.Changed {
+					fmt.Fprintf(out, "installed native-tool plugin in %s\n", res.Path)
+					fmt.Fprintln(out, "restart opencode for it to take effect")
+				} else {
+					fmt.Fprintf(out, "plugin already installed in %s\n", res.Path)
+				}
+				return nil
+			}
 			path, err := opencodeConfigPath(cmd)
 			if err != nil {
 				return err
@@ -112,14 +133,31 @@ func newInstallOpenCodeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
+	cmd.Flags().Bool("plugin", false, "install the native-tool plugin instead of wrapping MCP servers")
+	cmd.Flags().String("plugin-dir", filepath.Join(".opencode", "plugin"), "directory for the plugin file (with --plugin)")
 	return cmd
 }
 
 func newUninstallOpenCodeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "opencode",
-		Short: "Unwrap doupass-wrapped MCP servers in the opencode config",
+		Short: "Unwrap doupass-wrapped MCP servers or remove the plugin from opencode",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			withPlugin, _ := cmd.Flags().GetBool("plugin")
+			if withPlugin {
+				dir, _ := cmd.Flags().GetString("plugin-dir")
+				res, err := opencode.UninstallPlugin(filepath.Join(dir, "doupass.js"))
+				if err != nil {
+					return err
+				}
+				out := cmd.OutOrStdout()
+				if res.Changed {
+					fmt.Fprintf(out, "removed plugin %s\n", res.Path)
+				} else {
+					fmt.Fprintf(out, "no doupass plugin found in %s\n", res.Path)
+				}
+				return nil
+			}
 			path, err := opencodeConfigPath(cmd)
 			if err != nil {
 				return err
@@ -138,6 +176,8 @@ func newUninstallOpenCodeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
+	cmd.Flags().Bool("plugin", false, "remove the native-tool plugin instead of unwrapping MCP servers")
+	cmd.Flags().String("plugin-dir", filepath.Join(".opencode", "plugin"), "directory for the plugin file (with --plugin)")
 	return cmd
 }
 

@@ -2,13 +2,26 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/ogzhncnmr/doupass/internal/audit"
 	"github.com/ogzhncnmr/doupass/internal/policy"
 )
+
+func appendAudit(engine *policy.Engine, call policy.Call, dec policy.Decision, stderr io.Writer) {
+	path := engine.Policy.Audit.Path
+	if path == "" {
+		return
+	}
+	logger := &audit.Logger{Path: expandHome(path)}
+	if err := logger.Append(call, dec); err != nil {
+		fmt.Fprintf(stderr, "doupass: audit error: %v\n", err)
+	}
+}
 
 func homeDir() string {
 	h, err := os.UserHomeDir()

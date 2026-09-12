@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/ogzhncnmr/doupass/internal/audit"
 	"github.com/ogzhncnmr/doupass/internal/hook"
 	"github.com/ogzhncnmr/doupass/internal/policy"
 	"github.com/spf13/cobra"
@@ -43,13 +42,8 @@ func newHookCmd() *cobra.Command {
 			if dec.Action != policy.ActionAllow {
 				fmt.Fprintf(stderr, "doupass: %s %s (%s)\n", dec.Action, input.ToolName, dec.RuleID)
 			}
-			if p := engine.Policy.Audit.Path; p != "" {
-				logger := &audit.Logger{Path: expandHome(p)}
-				call := policy.Call{Surface: "hook", Tool: input.ToolName, Args: input.ToolInput}
-				if err := logger.Append(call, dec); err != nil {
-					fmt.Fprintf(stderr, "doupass: audit error: %v\n", err)
-				}
-			}
+			call := policy.Call{Surface: "hook", Tool: input.ToolName, Args: input.ToolInput}
+			appendAudit(engine, call, dec, stderr)
 			if out.HookSpecificOutput != nil {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				return enc.Encode(out)

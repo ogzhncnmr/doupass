@@ -47,6 +47,7 @@ func NewRootCmd() *cobra.Command {
 		newProxyCmd(),
 		newLogCmd(),
 		newHookCmd(),
+		newDecideCmd(),
 		newInstallCmd(),
 		newUninstallCmd(),
 	)

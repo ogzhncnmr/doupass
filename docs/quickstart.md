@@ -10,18 +10,18 @@ doupass version
 ## 2. Create a policy
 
 ```sh
-doupass init            # writes ./doupass.yml (starter, 4 rules)
+doupass init            # starter preset (18 rules)
+doupass init --preset locked-down
+doupass init --preset minimal
+doupass init --preset red-team
 ```
 
-Or copy the full starter set with 18 rules:
-
-```sh
-cp rules/starter.yml doupass.yml
-```
+Presets: `starter`, `minimal`, `locked-down`, `red-team`. Full starter packs live in `rules/` (see `rules/packs/` for community policies).
 
 ## 3. Dry-run decisions
 
 ```sh
+doupass policy lint doupass.yml
 doupass policy test doupass.yml
 doupass policy test doupass.yml --tool Read --arg file_path=~/.ssh/id_rsa
 doupass policy test doupass.yml --surface hook --tool Bash --arg "command=npm install x"

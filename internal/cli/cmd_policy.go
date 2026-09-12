@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -14,7 +15,40 @@ func newPolicyCmd() *cobra.Command {
 		Use:   "policy",
 		Short: "Inspect and test policies",
 	}
-	cmd.AddCommand(newPolicyTestCmd())
+	cmd.AddCommand(newPolicyTestCmd(), newPolicyLintCmd())
+	return cmd
+}
+
+func newPolicyLintCmd() *cobra.Command {
+	var strict bool
+	cmd := &cobra.Command{
+		Use:   "lint <policy.yml> [more...]",
+		Short: "Check policies for common mistakes",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			failed := false
+			for _, path := range args {
+				p, err := policy.LoadFile(path)
+				if err != nil {
+					return err
+				}
+				issues := policy.Lint(p)
+				fmt.Fprintf(out, "%s: %s (%d rules, %d issue(s))\n", path, p.Name, len(p.Rules), len(issues))
+				for _, is := range issues {
+					fmt.Fprintf(out, "  %s %s: %s\n", is.Level, is.Rule, is.Message)
+				}
+				if len(issues) > 0 {
+					failed = true
+				}
+			}
+			if failed && strict {
+				return errors.New("policy lint failed (--strict)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&strict, "strict", false, "exit non-zero when any issue is found")
 	return cmd
 }
 

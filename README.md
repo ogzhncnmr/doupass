@@ -15,7 +15,9 @@ Status: v0.1 in development. The core engine, MCP proxy, Claude Code hook, audit
 ```sh
 go install github.com/ogzhncnmr/doupass/cmd/doupass@latest   # Go 1.27+
 
-doupass init                                                  # writes ./doupass.yml
+doupass init                                                  # starter preset (18 rules)
+doupass init --preset locked-down                             # or: minimal, locked-down, red-team
+doupass policy lint doupass.yml                               # catch blanket rules and missing reasons
 doupass policy test doupass.yml --tool Read --arg file_path=~/.ssh/id_rsa
 doupass install claude                                        # registers the PreToolUse hook
 doupass proxy --server fs -- npx -y @modelcontextprotocol/server-filesystem .
@@ -53,6 +55,8 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 ## What works today
 
 - `doupass policy test` — validate a policy; evaluate a single call.
+- `doupass policy lint` — detect duplicate rules, blanket patterns, and missing reasons.
+- `doupass init --preset` — starter, minimal, locked-down, and red-team policies.
 - `doupass proxy` — transparent MCP stdio proxy with allow/deny/ask enforcement and fail-closed ask fallback.
 - `doupass hook claude` — Claude Code `PreToolUse` adapter emitting `permissionDecision` JSON; `allow` stays silent so the harness keeps its own permission flow.
 - `doupass install|uninstall claude` — idempotent `settings.json` merging with backups.
