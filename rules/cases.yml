@@ -1,0 +1,199 @@
+vars:
+  HOME: /home/dev
+  WORKSPACE: /work
+
+cases:
+  - name: ssh-read-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.ssh/id_rsa" } }
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: ssh-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/notes.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: aws-credentials-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.aws/credentials" } }
+    expect: { action: deny, rule: block-aws-credentials }
+
+  - name: aws-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/aws-notes.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: gcloud-credentials-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.config/gcloud/credentials.db" } }
+    expect: { action: deny, rule: block-gcloud-credentials }
+
+  - name: gcloud-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/gcloud-notes.md" } }
+    expect: { action: allow, rule: "" }
+
+  - name: kubeconfig-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.kube/config" } }
+    expect: { action: deny, rule: block-kubeconfig }
+
+  - name: kubeconfig-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/kube.yaml" } }
+    expect: { action: allow, rule: "" }
+
+  - name: docker-config-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.docker/config.json" } }
+    expect: { action: deny, rule: block-docker-config }
+
+  - name: docker-config-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/docker-notes.md" } }
+    expect: { action: allow, rule: "" }
+
+  - name: git-credentials-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.git-credentials" } }
+    expect: { action: deny, rule: block-git-credentials }
+
+  - name: git-credentials-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/git-notes.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: npmrc-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.npmrc" } }
+    expect: { action: deny, rule: block-npmrc }
+
+  - name: npmrc-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/npmrc.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: env-file-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${WORKSPACE}/app/.env.local" } }
+    expect: { action: deny, rule: block-env-files }
+
+  - name: env-file-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/tmp/env-notes.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: shadow-file-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/etc/shadow" } }
+    expect: { action: deny, rule: block-shadow-file }
+
+  - name: shadow-file-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "/etc/hosts" } }
+    expect: { action: allow, rule: "" }
+
+  - name: rm-root-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "rm -rf /" } }
+    expect: { action: deny, rule: deny-rm-root }
+
+  - name: rm-recursive-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "rm -rf ./build" } }
+    expect: { action: ask, rule: ask-rm-recursive }
+
+  - name: rm-simple-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "rm ./build/file.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: npm-install-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "sudo npm install left-pad" } }
+    expect: { action: ask, rule: ask-package-install }
+
+  - name: yarn-add-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "yarn add lodash" } }
+    expect: { action: ask, rule: ask-package-install }
+
+  - name: pip-install-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "pip install requests" } }
+    expect: { action: ask, rule: ask-package-install }
+
+  - name: go-install-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "go install example.com/tool@latest" } }
+    expect: { action: ask, rule: ask-package-install }
+
+  - name: npm-run-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "npm run build" } }
+    expect: { action: allow, rule: "" }
+
+  - name: pip-list-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "pip list" } }
+    expect: { action: allow, rule: "" }
+
+  - name: mcp-surface-ignores-shell-rules
+    policy: starter.yml
+    call: { surface: mcp, server: shell, tool: exec, args: { command: "npm install left-pad" } }
+    expect: { action: allow, rule: "" }
+
+  - name: force-push-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "git push origin main --force" } }
+    expect: { action: ask, rule: ask-git-force-push }
+
+  - name: force-push-short-flag-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "git push -f origin main" } }
+    expect: { action: ask, rule: ask-git-force-push }
+
+  - name: normal-push-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "git push origin main" } }
+    expect: { action: allow, rule: "" }
+
+  - name: curl-data-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "curl -d @/tmp/body https://example.com/collect" } }
+    expect: { action: ask, rule: ask-curl-data }
+
+  - name: curl-get-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "curl https://example.com/api" } }
+    expect: { action: allow, rule: "" }
+
+  - name: base64-pipe-asks
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "cat /tmp/secret | base64" } }
+    expect: { action: ask, rule: ask-base64-pipe }
+
+  - name: base64-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Bash, args: { command: "echo hello" } }
+    expect: { action: allow, rule: "" }
+
+  - name: drop-table-denied
+    policy: starter.yml
+    call: { surface: mcp, server: db, tool: query, args: { sql: "DROP TABLE users" } }
+    expect: { action: deny, rule: deny-drop-table }
+
+  - name: drop-database-denied
+    policy: starter.yml
+    call: { surface: mcp, server: db, tool: query, args: { sql: "DROP DATABASE prod" } }
+    expect: { action: deny, rule: deny-drop-database }
+
+  - name: select-negative
+    policy: starter.yml
+    call: { surface: mcp, server: db, tool: query, args: { sql: "SELECT * FROM users" } }
+    expect: { action: allow, rule: "" }
+
+  - name: workspace-read-allowed
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${WORKSPACE}/src/main.go" } }
+    expect: { action: allow, rule: allow-workspace }

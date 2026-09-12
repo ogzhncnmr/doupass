@@ -42,8 +42,17 @@ func specDir(t *testing.T) string {
 }
 
 func TestConformance(t *testing.T) {
-	dir := specDir(t)
-	data, err := os.ReadFile(filepath.Join(dir, "fixtures", "conformance.yml"))
+	runConformanceFile(t, filepath.Join(specDir(t), "fixtures", "conformance.yml"))
+}
+
+func TestStarterRules(t *testing.T) {
+	runConformanceFile(t, filepath.Join(specDir(t), "..", "rules", "cases.yml"))
+}
+
+func runConformanceFile(t *testing.T, casesPath string) {
+	t.Helper()
+	dir := filepath.Dir(casesPath)
+	data, err := os.ReadFile(casesPath)
 	if err != nil {
 		t.Fatalf("read fixtures: %v", err)
 	}
@@ -56,7 +65,7 @@ func TestConformance(t *testing.T) {
 	}
 	for _, tc := range conf.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			p, err := LoadFile(filepath.Join(dir, "fixtures", tc.Policy))
+			p, err := LoadFile(filepath.Join(dir, tc.Policy))
 			if err != nil {
 				t.Fatalf("load policy: %v", err)
 			}
