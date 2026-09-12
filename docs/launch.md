@@ -39,7 +39,7 @@ doupass log verify
 > - Hash-chained local audit log with secret masking (`doupass log verify`).
 > - Single Go binary, Apache-2.0, no account, no telemetry.
 >
-> The policy format has a spec, a JSON Schema, and a conformance suite (27 spec cases + 40 starter-rule cases in CI). It's v0.1 — native-tool hooks only cover Claude Code today, and it does not try to be an enterprise gateway or a sandbox.
+> The policy format has a spec, a JSON Schema, and a conformance suite (33 spec cases + 47 starter-rule cases in CI). It's v0.1 — native-tool hooks only cover Claude Code today, and it does not try to be an enterprise gateway or a sandbox.
 >
 > Honest limitations in the FAQ; I'd love feedback on the rule format especially.
 >

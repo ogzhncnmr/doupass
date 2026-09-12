@@ -12,7 +12,7 @@ doupass setup --dry-run    # show what would change
 doupass setup              # apply; backups are written next to every config file
 ```
 
-`setup` detects Claude Code, opencode, Cursor, Windsurf, Kiro, Cline, and Roo Code, and wraps their MCP servers. Native-tool hooks are available for Claude Code and opencode today; everything else gets MCP proxying.
+`setup` detects Claude Code, opencode, Codex CLI, Cursor, Windsurf, Kiro, Cline, and Roo Code, and wraps their MCP servers. Native-tool hooks are available for Claude Code and opencode today; everything else gets MCP proxying. If no policy exists yet, `setup` first writes the starter policy to `~/.doupass/doupass.yml`, so one command leaves the machine protected.
 
 ## Claude Code
 
@@ -97,7 +97,15 @@ After `doupass install opencode`:
 
 ## Codex CLI
 
-Codex MCP servers are configured in `~/.codex/config.toml`. Wrap the command manually:
+Automatic:
+
+```sh
+doupass install codex                      # edits ~/.codex/config.toml, with backup
+doupass install codex --config ./config.toml
+doupass uninstall codex
+```
+
+The installer rewrites each local `[mcp_servers.<name>]` entry so its command runs through the proxy:
 
 ```toml
 [mcp_servers.filesystem]
@@ -105,7 +113,7 @@ command = "doupass"
 args = ["proxy", "--server", "filesystem", "--", "npx", "-y", "@modelcontextprotocol/server-filesystem", "."]
 ```
 
-Codex does not expose an external pre-tool command hook, so doupass enforces MCP traffic only; native-tool approval stays with Codex's own sandbox and approval modes. If a future Codex version adds hooks, an adapter can reuse `doupass decide`.
+Remote (url-based) servers are left untouched — they never run a local command doupass could wrap. Codex does not expose an external pre-tool command hook, so doupass enforces MCP traffic only; native-tool approval stays with Codex's own sandbox and approval modes. If a future Codex version adds hooks, an adapter can reuse `doupass decide`.
 
 ## Cursor
 
@@ -138,6 +146,7 @@ Locations `setup` checks:
 
 | Tool | Path |
 |---|---|
+| Codex CLI | `~/.codex/config.toml` |
 | Cursor | `~/.cursor/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | Kiro | `~/.kiro/settings/mcp.json` |
