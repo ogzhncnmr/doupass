@@ -39,7 +39,7 @@ func newInitCmd() *cobra.Command {
 			if err := os.WriteFile(target, data, 0o644); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "wrote %s (preset %s)\n", target, preset)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s wrote %s (preset %s)\n", stateGlyph("ok"), target, preset)
 			return nil
 		},
 	}

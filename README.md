@@ -2,7 +2,7 @@
 
 A local-first policy engine for AI coding agents. One portable policy file governs tool calls across harnesses: MCP tool calls through a proxy, harness-native tools (Bash, Read, Write, Edit) through hooks.
 
-Status: v0.1 in development. The core engine, MCP proxy, Claude Code hook, audit log, and CLI are working and tested. Packaging and docs land next; see `plans/` for the construction plan.
+Status: v0.1-rc. The core engine, MCP proxy, Claude Code hook, audit log, CLI, and docs are working and tested; release engineering is in progress. See `plans/` for the construction plan.
 
 ## Why
 
@@ -16,11 +16,11 @@ Status: v0.1 in development. The core engine, MCP proxy, Claude Code hook, audit
 go install github.com/ogzhncnmr/doupass/cmd/doupass@latest   # Go 1.27+
 
 doupass init                                                  # starter preset (18 rules)
-doupass init --preset locked-down                             # or: minimal, locked-down, red-team
+doupass init --preset locked-down                             # or: minimal, red-team
 doupass policy lint doupass.yml                               # catch blanket rules and missing reasons
 doupass policy test doupass.yml --tool Read --arg file_path=~/.ssh/id_rsa
 doupass setup --dry-run                                       # see which installed tools would be wired
-doupass setup                                                 # wire Claude Code, opencode, Cursor, Windsurf, Kiro, Cline, Roo Code
+doupass setup                                                 # wire Claude Code, opencode, Codex, Cursor, Windsurf, Kiro, Cline, Roo Code
 doupass install claude                                        # registers the PreToolUse hook
 doupass proxy --server fs -- npx -y @modelcontextprotocol/server-filesystem .
 doupass log tail
@@ -62,13 +62,14 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 
 ## What works today
 
-- `doupass setup` — detect installed agent tools and wire them in one command (dry-run supported).
+- `doupass setup` — detect installed agent tools and wire them in one command (dry-run supported; writes the starter policy first if none exists).
 - `doupass install generic --config <file>` — wrap MCP servers in any `mcpServers`-style JSON config.
+- `doupass install codex` — wrap local MCP servers in the Codex CLI `config.toml`.
 - `doupass policy test` — validate a policy; evaluate a single call.
 - `doupass policy lint` — detect duplicate rules, blanket patterns, and missing reasons.
 - `doupass init --preset` — starter, minimal, locked-down, and red-team policies.
 - `doupass proxy` — transparent MCP stdio proxy with allow/deny/ask enforcement and fail-closed ask fallback.
-- `doupass hook claude` — Claude Code `PreToolUse` adapter emitting `permissionDecision` JSON; `allow` stays silent so the harness keeps its own permission flow.
+- `doupass hook claude` — Claude Code `PreToolUse` adapter emitting `permissionDecision` JSON; `allow` stays silent so the harness keeps its own permission flow, and any doupass failure (unreadable input, missing policy) denies out loud instead of failing open.
 - `doupass decide` — generic JSON-in / decision-out endpoint for custom integrations.
 - `doupass install opencode --plugin` — native-tool enforcement for opencode via its plugin API.
 - `doupass install|uninstall claude` — idempotent `settings.json` merging with backups.
@@ -95,7 +96,7 @@ Run it yourself: `go test ./internal/policy -bench=BenchmarkDecide -benchtime=2s
 
 ## Non-goals (v0.1)
 
-OS-level sandboxing, malware detection, prompt-injection heuristics, and cross-call taint tracking. Other harnesses' native tools (Codex, OpenCode, Cursor) are not enforced yet. Details in [`docs/threat-model.md`](docs/threat-model.md).
+OS-level sandboxing, malware detection, prompt-injection heuristics, and cross-call taint tracking. Native tools of other harnesses (Codex, Cursor) are not intercepted yet — Codex, Cursor & co. are covered on the MCP surface, while Claude Code and opencode also enforce their native tools. Remote (URL-based) MCP servers are out of scope. Details in [`docs/threat-model.md`](docs/threat-model.md).
 
 ## Development
 

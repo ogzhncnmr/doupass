@@ -385,12 +385,41 @@ func TestLandingMenuModel(t *testing.T) {
 
 	model := landingModel{choices: landingChoices, info: landingInfo{PolicyName: "starter", Rules: 18, Found: true, Integrations: 2}}
 	view := model.View()
-	for _, want := range []string{"Show status", "will run:", "doupass", "▶", "18", "integrations"} {
+	for _, want := range []string{"Show status", "will run:", "doupass", "▶", "18 rules", "integrations", "2 integrations wired", "no entries yet", "↑/↓ move"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
 	}
 	t.Logf("\n%s", view)
+}
+
+func TestLandingStatusRows(t *testing.T) {
+	healthy := landingModel{choices: landingChoices, info: landingInfo{
+		Found: true, PolicyName: "starter", Rules: 18,
+		AuditExists: true, AuditOK: true, AuditEntries: 7, Integrations: 3,
+	}}
+	joined := strings.Join(healthy.statusRows(), "\n")
+	for _, want := range []string{"starter", "18 rules", "0 lint issues", "7 entries", "hash chain OK", "3 integrations wired"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("healthy status missing %q:\n%s", want, joined)
+		}
+	}
+
+	broken := landingModel{choices: landingChoices, info: landingInfo{Invalid: true, AuditExists: true}}
+	joined = strings.Join(broken.statusRows(), "\n")
+	for _, want := range []string{"invalid", "tampered or corrupt"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("broken status missing %q:\n%s", want, joined)
+		}
+	}
+
+	missing := landingModel{choices: landingChoices}
+	joined = strings.Join(missing.statusRows(), "\n")
+	for _, want := range []string{"not found", "no entries yet", "0 integrations wired"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing status %q:\n%s", want, joined)
+		}
+	}
 }
 
 func TestPolicyCommandsExpandHome(t *testing.T) {
@@ -532,5 +561,115 @@ func TestInstallAndUninstallOpenCodePlugin(t *testing.T) {
 	}
 	if _, err := os.Stat(pluginPath); !os.IsNotExist(err) {
 		t.Fatal("plugin still present")
+	}
+}
+
+func TestSetupAutoCreatesStarterPolicy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	t.Setenv("AppData", filepath.Join(home, "appdata"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+
+	out, _, err := run(t, "setup", "--dry-run")
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	if !strings.Contains(out, "starter policy") {
+		t.Fatalf("expected auto-init notice, got:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".doupass", "doupass.yml")); err != nil {
+		t.Fatalf("starter policy not written: %v", err)
+	}
+}
+
+func TestSetupWrapsCodex(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	t.Setenv("AppData", filepath.Join(home, "appdata"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+
+	codexDir := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(codexDir, "config.toml")
+	body := "[mcp_servers.fs]\ncommand = \"npx\"\nargs = [\"-y\", \"server-fs\", \".\"]\n"
+	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := run(t, "setup", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "codex") {
+		t.Fatalf("codex target missing from dry run:\n%s", out)
+	}
+
+	out, _, err = run(t, "setup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "wrapped 1 MCP server") {
+		t.Fatalf("codex wrap missing from setup output:\n%s", out)
+	}
+	data, _ := os.ReadFile(cfg)
+	if !strings.Contains(string(data), `"doupass"`) {
+		t.Fatalf("codex config not wrapped:\n%s", data)
+	}
+
+	if _, _, err := run(t, "uninstall", "codex", "--config", cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(cfg)
+	if strings.Contains(string(data), "doupass") {
+		t.Fatalf("codex config not restored:\n%s", data)
+	}
+}
+
+func TestChoosePreset(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{"\n", "starter", true},
+		{"3\n", "locked-down", true},
+		{"red-team\n", "red-team", true},
+		{"q\n", "", false},
+		{"bogus\n", "", false},
+	}
+	for _, tc := range cases {
+		var out bytes.Buffer
+		got, ok := choosePreset(strings.NewReader(tc.input), &out)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("choosePreset(%q) = %q,%v want %q,%v", tc.input, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestHookClaudeDeniesOnInvalidInput(t *testing.T) {
+	out, _, err := runWithStdin(t, "not json", "hook", "claude", "--policy", examplePolicy())
+	if err != nil {
+		t.Fatalf("invalid input must deny (exit 0), got error: %v", err)
+	}
+	if !strings.Contains(out, `"permissionDecision":"deny"`) {
+		t.Fatalf("expected fail-closed deny output, got %q", out)
+	}
+}
+
+func TestHookClaudeDeniesWithoutPolicy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HOME", home)
+	input := `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/tmp/x"}}`
+	out, _, err := runWithStdin(t, input, "hook", "claude")
+	if err != nil {
+		t.Fatalf("missing policy must deny (exit 0), got error: %v", err)
+	}
+	if !strings.Contains(out, `"permissionDecision":"deny"`) {
+		t.Fatalf("expected fail-closed deny output, got %q", out)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/ogzhncnmr/doupass/internal/claude"
+	"github.com/ogzhncnmr/doupass/internal/codex"
 	"github.com/ogzhncnmr/doupass/internal/mcpjson"
 	"github.com/ogzhncnmr/doupass/internal/opencode"
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ func newInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "Install harness integrations",
 	}
-	cmd.AddCommand(newInstallClaudeCmd(), newInstallOpenCodeCmd(), newInstallGenericCmd())
+	cmd.AddCommand(newInstallClaudeCmd(), newInstallOpenCodeCmd(), newInstallCodexCmd(), newInstallGenericCmd())
 	return cmd
 }
 
@@ -26,7 +27,7 @@ func newUninstallCmd() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove harness integrations",
 	}
-	cmd.AddCommand(newUninstallClaudeCmd(), newUninstallOpenCodeCmd(), newUninstallGenericCmd())
+	cmd.AddCommand(newUninstallClaudeCmd(), newUninstallOpenCodeCmd(), newUninstallCodexCmd(), newUninstallGenericCmd())
 	return cmd
 }
 
@@ -235,6 +236,72 @@ func newUninstallOpenCodeCmd() *cobra.Command {
 	cmd.Flags().Bool("plugin", false, "remove the native-tool plugin instead of unwrapping MCP servers")
 	cmd.Flags().String("plugin-dir", filepath.Join(".opencode", "plugin"), "directory for the plugin file (with --plugin)")
 	return cmd
+}
+
+func newInstallCodexCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "codex",
+		Short: "Wrap local MCP servers in the Codex CLI config (config.toml)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := codexConfigPath(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := codex.WrapServers(path)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "wrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+				if res.Backup != "" {
+					fmt.Fprintf(out, "backup: %s\n", res.Backup)
+				}
+			} else {
+				fmt.Fprintf(out, "nothing to wrap in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "Codex config file (default: ~/.codex/config.toml)")
+	return cmd
+}
+
+func newUninstallCodexCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "codex",
+		Short: "Unwrap doupass-wrapped MCP servers in the Codex CLI config",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := codexConfigPath(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := codex.UnwrapServers(path)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "unwrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+			} else {
+				fmt.Fprintf(out, "no doupass-wrapped servers found in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "Codex config file (default: ~/.codex/config.toml)")
+	return cmd
+}
+
+func codexConfigPath(cmd *cobra.Command) (string, error) {
+	if p, _ := cmd.Flags().GetString("config"); p != "" {
+		return expandHome(p), nil
+	}
+	home := homeDir()
+	if home == "" {
+		return "", errors.New("cannot determine home directory; pass --config")
+	}
+	return filepath.Join(home, ".codex", "config.toml"), nil
 }
 
 func claudeSettingsPath(cmd *cobra.Command) (string, error) {

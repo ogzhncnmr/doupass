@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -11,8 +12,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/ogzhncnmr/doupass/internal/audit"
 	"github.com/ogzhncnmr/doupass/internal/claude"
+	"github.com/ogzhncnmr/doupass/internal/codex"
 	"github.com/ogzhncnmr/doupass/internal/opencode"
+	"github.com/ogzhncnmr/doupass/internal/policy"
 	"github.com/spf13/cobra"
 )
 
@@ -45,24 +49,18 @@ var landingIcons = map[string]string{
 	"Quit":                  "×",
 }
 
-const landingAccent = lipgloss.Color("#38BDF8")
-
-var (
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(landingAccent)
-	iconStyle   = lipgloss.NewStyle().Foreground(landingAccent)
-	chipStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(landingAccent).Padding(0, 1)
-	warnChip    = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("#F87171")).Padding(0, 1)
-	frameStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(landingAccent).Padding(1, 2)
-	footerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	willStyle   = lipgloss.NewStyle().Bold(true).Foreground(landingAccent)
-)
-
 type landingInfo struct {
+	Version      string
+	PolicyPath   string
 	PolicyName   string
 	Rules        int
+	LintIssues   int
 	Found        bool
 	Invalid      bool
+	AuditPath    string
+	AuditExists  bool
+	AuditOK      bool
+	AuditEntries int
 	Integrations int
 }
 
@@ -124,47 +122,95 @@ func (m landingModel) View() string {
 			rowWidth = n
 		}
 	}
-	highlight := lipgloss.NewStyle().Background(landingAccent).Foreground(lipgloss.Color("16")).Bold(true).Width(rowWidth)
+	highlight := lipgloss.NewStyle().Background(landingAccent).Foreground(lipgloss.Color("16")).Bold(true).Width(rowWidth - 1)
 
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("doupass"))
-	b.WriteString(dimStyle.Render("  policy guard for AI coding agents"))
-	b.WriteString("\n")
-	b.WriteString(m.chips())
-	b.WriteString("\n\n")
+	title := titleStyle.Render("◆ doupass") + dimStyle.Render(" · policy guard for AI coding agents")
+	if v := m.info.Version; v != "" {
+		if len(v) > 24 {
+			v = truncateMiddle(v, 24)
+		}
+		version := dimStyle.Render("v" + v)
+		if gap := rowWidth - lipgloss.Width(title) - lipgloss.Width(version); gap > 0 {
+			title += strings.Repeat(" ", gap) + version
+		}
+	}
+
+	var lines []string
+	lines = append(lines, title, dividerMark)
+	lines = append(lines, m.statusRows()...)
+	lines = append(lines, dividerMark, "")
 	for i, c := range m.choices {
 		if i == m.cursor {
-			b.WriteString(highlight.Render(strings.TrimLeft(plain[i], " ")))
+			lines = append(lines, " "+highlight.Render(strings.TrimLeft(plain[i], " ")))
 		} else {
-			b.WriteString(" " + iconStyle.Render(landingIcons[c.Label]) + " " + padRight(c.Label, labelWidth) + "  " + dimStyle.Render(c.Description))
+			lines = append(lines, " "+iconStyle.Render(landingIcons[c.Label])+" "+padRight(c.Label, labelWidth)+"  "+dimStyle.Render(c.Description))
 		}
-		b.WriteString("\n")
 	}
 	if !m.choices[m.cursor].Quit {
-		b.WriteString("\n " + dimStyle.Render("▶ will run: ") + willStyle.Render("doupass "+strings.Join(m.choices[m.cursor].Args, " ")) + "\n")
+		lines = append(lines, "", " "+dimStyle.Render("▶ will run: ")+willStyle.Render("doupass "+strings.Join(m.choices[m.cursor].Args, " ")))
 	}
-	return "\n" + frameStyle.Render(b.String()) + "\n" + footerStyle.Render("  ↑/↓ move  ·  enter select  ·  q quit") + "\n"
+
+	inner := rowWidth
+	for _, l := range lines {
+		if l == dividerMark {
+			continue
+		}
+		if n := lipgloss.Width(l); n > inner {
+			inner = n
+		}
+	}
+	for i, l := range lines {
+		if l == dividerMark {
+			lines[i] = dimStyle.Render(strings.Repeat("─", inner))
+		}
+	}
+
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString(l)
+		b.WriteString("\n")
+	}
+	return "\n" + frameStyle.Render(b.String()) + "\n" + footerStyle.Render("  ↑/↓ move  ·  enter run  ·  q quit") + "\n"
 }
 
-func (m landingModel) chips() string {
-	if m.info.Invalid {
-		return " " + warnChip.Render(" policy invalid ")
-	}
-	if !m.info.Found {
-		return " " + warnChip.Render(" policy not found ")
-	}
-	parts := []string{
-		chipStyle.Render(fmt.Sprintf(" policy · %s · %d rules ", m.info.PolicyName, m.info.Rules)),
-		chipStyle.Render(fmt.Sprintf(" integrations · %d ", m.info.Integrations)),
-	}
-	return " " + strings.Join(parts, " ")
-}
+const dividerMark = "\x00divider\x00"
 
-func padRight(s string, n int) string {
-	if w := utf8.RuneCountInString(s); w < n {
-		return s + strings.Repeat(" ", n-w)
+func (m landingModel) statusRows() []string {
+	line := func(label, value string) string {
+		return " " + dimStyle.Render(padRight(label, 12)) + "  " + value
 	}
-	return s
+	var policyValue string
+	switch {
+	case m.info.Invalid:
+		policyValue = stateGlyph("fail") + " invalid — check with doupass policy lint"
+	case !m.info.Found:
+		policyValue = stateGlyph("fail") + " not found — pick Create a policy below"
+	default:
+		name := m.info.PolicyName
+		if name == "" {
+			name = filepath.Base(m.info.PolicyPath)
+		}
+		policyValue = stateGlyph("ok") + " " + name + " · " + plural(m.info.Rules, "rule") + " · " + plural(m.info.LintIssues, "lint issue")
+	}
+	var auditValue string
+	switch {
+	case !m.info.AuditExists:
+		auditValue = stateGlyph("skip") + " no entries yet"
+	case m.info.AuditOK:
+		auditValue = stateGlyph("ok") + " " + plural(m.info.AuditEntries, "entry") + " · hash chain OK"
+	default:
+		auditValue = stateGlyph("fail") + " tampered or corrupt — run doupass log verify"
+	}
+	integrationState := "skip"
+	if m.info.Integrations > 0 {
+		integrationState = "ok"
+	}
+	integrationValue := stateGlyph(integrationState) + " " + plural(m.info.Integrations, "integration") + " wired"
+	return []string{
+		line("policy", policyValue),
+		line("audit", auditValue),
+		line("integrations", integrationValue),
+	}
 }
 
 func runLanding(cmd *cobra.Command) error {
@@ -175,6 +221,65 @@ func runLanding(cmd *cobra.Command) error {
 		printStaticLanding(out)
 		return nil
 	}
+	for {
+		choice, quit, err := selectLanding(in, out)
+		if err != nil || quit {
+			return err
+		}
+		args := choice
+		if choice[0] == "init" {
+			preset, ok := choosePreset(in, out)
+			if !ok {
+				continue
+			}
+			args = []string{"init", "--preset", preset}
+		}
+		fmt.Fprintf(out, "\n%s %s\n\n", iconStyle.Render("◆"), willStyle.Render("doupass "+strings.Join(args, " ")))
+		if err := Execute(args, in, out, errOut); err != nil {
+			fmt.Fprintf(errOut, "%s\n", failStyle.Render("✗ "+err.Error()))
+		}
+		pauseForReturn(in, out)
+	}
+}
+
+type presetOption struct {
+	Name        string
+	Description string
+}
+
+var presetOptions = []presetOption{
+	{"starter", "block credential files, ask before risky commands, normal work stays allowed"},
+	{"minimal", "only the highest-value credential denies, everything else allowed"},
+	{"locked-down", "deny by default, explicitly allow what you trust"},
+	{"red-team", "permissive but logs exfiltration patterns for review"},
+}
+
+func choosePreset(in io.Reader, out io.Writer) (string, bool) {
+	fmt.Fprintln(out, "Choose a ready-made policy:")
+	for i, p := range presetOptions {
+		fmt.Fprintf(out, "  %d. %-11s %s\n", i+1, p.Name, dimStyle.Render(p.Description))
+	}
+	fmt.Fprint(out, "\npreset [1-4, enter = starter, q = cancel]: ")
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && line == "" {
+		return "", false
+	}
+	switch strings.TrimSpace(strings.ToLower(line)) {
+	case "", "1", "starter":
+		return "starter", true
+	case "2", "minimal":
+		return "minimal", true
+	case "3", "locked-down", "lockeddown":
+		return "locked-down", true
+	case "4", "red-team", "redteam":
+		return "red-team", true
+	default:
+		fmt.Fprintf(out, "%s unknown preset — back to the menu\n", failStyle.Render("✗"))
+		return "", false
+	}
+}
+
+func selectLanding(in io.Reader, out io.Writer) ([]string, bool, error) {
 	program := tea.NewProgram(
 		newLandingModel(),
 		tea.WithInput(in),
@@ -183,13 +288,19 @@ func runLanding(cmd *cobra.Command) error {
 	)
 	final, err := program.Run()
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	m, ok := final.(landingModel)
-	if !ok || len(m.chosen) == 0 {
-		return nil
+	if !ok || m.quit || len(m.chosen) == 0 {
+		return nil, true, nil
 	}
-	return Execute(m.chosen, in, out, errOut)
+	return m.chosen, false, nil
+}
+
+func pauseForReturn(in io.Reader, out io.Writer) {
+	fmt.Fprint(out, dimStyle.Render("\npress Enter to return to the menu…"))
+	r := bufio.NewReader(in)
+	_, _ = r.ReadString('\n')
 }
 
 func isInteractiveTerminal(in io.Reader, out io.Writer) bool {
@@ -244,14 +355,26 @@ In a terminal, run 'doupass' with no arguments for an interactive menu.
 }
 
 func landingInfoData() landingInfo {
-	info := landingInfo{}
-	if path, err := findPolicyFile(""); err == nil {
+	info := landingInfo{Version: ResolvedVersion(), AuditPath: filepath.Join(homeDir(), ".doupass", "audit.jsonl")}
+	if policyPath, err := findPolicyFile(""); err == nil {
 		info.Found = true
-		if engine, err := loadEngine(path); err == nil {
+		info.PolicyPath = policyPath
+		if engine, err := loadEngine(policyPath); err != nil {
+			info.Invalid = true
+		} else {
 			info.PolicyName = engine.Policy.Name
 			info.Rules = len(engine.Policy.Rules)
-		} else {
-			info.Invalid = true
+			info.LintIssues = len(policy.Lint(engine.Policy))
+			if p := engine.Policy.Audit.Path; p != "" {
+				info.AuditPath = expandHome(p)
+			}
+		}
+	}
+	if st, err := os.Stat(info.AuditPath); err == nil && st.Mode().IsRegular() {
+		info.AuditExists = true
+		if res, verifyErr := audit.Verify(info.AuditPath); verifyErr == nil {
+			info.AuditOK = true
+			info.AuditEntries = res.Entries
 		}
 	}
 	if claude.HasHook(filepath.Join(homeDir(), ".claude", "settings.json")) {
@@ -261,8 +384,15 @@ func landingInfoData() landingInfo {
 		info.Integrations++
 	}
 	for _, tgt := range setupTargets() {
-		if tgt.Kind == "mcpjson" && fileContains(tgt.Path, `"doupass"`) && fileContains(tgt.Path, `"proxy"`) {
-			info.Integrations++
+		switch tgt.Kind {
+		case "mcpjson":
+			if fileContains(tgt.Path, `"doupass"`) && fileContains(tgt.Path, `"proxy"`) {
+				info.Integrations++
+			}
+		case "codex":
+			if codex.HasWrappers(tgt.Path) {
+				info.Integrations++
+			}
 		}
 	}
 	return info
