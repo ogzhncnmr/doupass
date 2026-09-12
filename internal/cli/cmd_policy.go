@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/ogzhncnmr/doupass/internal/policy"
@@ -29,8 +30,11 @@ func newPolicyLintCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			failed := false
 			for _, path := range args {
-				p, err := policy.LoadFile(path)
+				p, err := policy.LoadFile(expandHome(path))
 				if err != nil {
+					if os.IsNotExist(err) {
+						return fmt.Errorf("policy file not found: %s", expandHome(path))
+					}
 					return err
 				}
 				issues := policy.Lint(p)
@@ -58,7 +62,7 @@ func newPolicyTestCmd() *cobra.Command {
 		Short: "Validate a policy and optionally evaluate a single call",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			engine, err := loadEngine(args[0])
+			engine, err := loadEngine(expandHome(args[0]))
 			if err != nil {
 				return err
 			}

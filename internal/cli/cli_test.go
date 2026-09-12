@@ -304,6 +304,37 @@ func TestInstallAndUninstallGeneric(t *testing.T) {
 	}
 }
 
+func TestPolicyCommandsExpandHome(t *testing.T) {
+	home := os.Getenv("USERPROFILE")
+	if home == "" {
+		home = os.Getenv("HOME")
+	}
+	src, err := os.ReadFile(examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "tilde-policy.yml"), src, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "policy", "lint", "~/tilde-policy.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "default-dev") {
+		t.Fatalf("lint out = %q", out)
+	}
+	out, _, err = run(t, "policy", "test", "~/tilde-policy.yml", "--tool", "Read", "--arg", "file_path=/home/x/.ssh/id_rsa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"action": "deny"`) {
+		t.Fatalf("test out = %q", out)
+	}
+	if _, _, err := run(t, "policy", "test", "~/missing-policy.yml"); err == nil || !strings.Contains(err.Error(), "policy file not found") {
+		t.Fatalf("expected friendly not-found error, got %v", err)
+	}
+}
+
 func TestInstallAndUninstallClaude(t *testing.T) {
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	out, _, err := run(t, "install", "claude", "--settings", settings)

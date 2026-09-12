@@ -35,7 +35,7 @@ func newDecideCmd() *cobra.Command {
 			var data []byte
 			if inputPath != "" {
 				//#nosec G304 -- input path is chosen by the local user
-				data, err = os.ReadFile(inputPath)
+				data, err = os.ReadFile(expandHome(inputPath))
 			} else {
 				data, err = io.ReadAll(io.LimitReader(cmd.InOrStdin(), 1<<20))
 			}

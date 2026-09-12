@@ -47,7 +47,7 @@ func expandHome(p string) string {
 
 func findPolicyFile(flagValue string) (string, error) {
 	if flagValue != "" {
-		return flagValue, nil
+		return expandHome(flagValue), nil
 	}
 	candidates := []string{"doupass.yml"}
 	if home := homeDir(); home != "" {
@@ -64,6 +64,9 @@ func findPolicyFile(flagValue string) (string, error) {
 func loadEngine(policyPath string) (*policy.Engine, error) {
 	p, err := policy.LoadFile(policyPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("policy file not found: %s", policyPath)
+		}
 		return nil, err
 	}
 	wd, err := os.Getwd()

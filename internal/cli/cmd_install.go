@@ -150,7 +150,7 @@ func newInstallOpenCodeCmd() *cobra.Command {
 			withPlugin, _ := cmd.Flags().GetBool("plugin")
 			if withPlugin {
 				dir, _ := cmd.Flags().GetString("plugin-dir")
-				pluginPath := filepath.Join(dir, "doupass.js")
+				pluginPath := filepath.Join(expandHome(dir), "doupass.js")
 				binary, err := os.Executable()
 				if err != nil {
 					binary = "doupass"
@@ -202,7 +202,7 @@ func newUninstallOpenCodeCmd() *cobra.Command {
 			withPlugin, _ := cmd.Flags().GetBool("plugin")
 			if withPlugin {
 				dir, _ := cmd.Flags().GetString("plugin-dir")
-				res, err := opencode.UninstallPlugin(filepath.Join(dir, "doupass.js"))
+				res, err := opencode.UninstallPlugin(filepath.Join(expandHome(dir), "doupass.js"))
 				if err != nil {
 					return err
 				}

@@ -21,7 +21,7 @@ func newLogCmd() *cobra.Command {
 func auditPath(cmd *cobra.Command) string {
 	p, _ := cmd.Flags().GetString("path")
 	if p != "" {
-		return p
+		return expandHome(p)
 	}
 	return filepath.Join(homeDir(), ".doupass", "audit.jsonl")
 }
