@@ -1,0 +1,16 @@
+PackageIdentifier: Ogzhncnmr.Doupass
+PackageVersion: 0.1.0-rc4
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: doupass.exe
+    PortableCommandAlias: doupass
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/ogzhncnmr/doupass/releases/download/v0.1.0-rc4/doupass_0.1.0-rc4_windows_amd64.zip
+    InstallerSha256: 0761F7FC1F621B5C6F2693C26D5061A792392D08CE36A4140683AD7E9E3A7FE2
+  - Architecture: arm64
+    InstallerUrl: https://github.com/ogzhncnmr/doupass/releases/download/v0.1.0-rc4/doupass_0.1.0-rc4_windows_arm64.zip
+    InstallerSha256: 69C48136C57F832E3DA2A58415B3024928C0FD20BB37EA5539CBC6139334FB5C
+ManifestType: installer
+ManifestVersion: 1.6.0

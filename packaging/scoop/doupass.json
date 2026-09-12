@@ -1,0 +1,33 @@
+{
+  "version": "0.1.0-rc4",
+  "description": "Local-first policy engine for AI coding agents",
+  "homepage": "https://github.com/ogzhncnmr/doupass",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/ogzhncnmr/doupass/releases/download/v0.1.0-rc4/doupass_0.1.0-rc4_windows_amd64.zip",
+      "hash": "0761f7fc1f621b5c6f2693c26d5061a792392d08ce36a4140683ad7e9e3a7fe2"
+    },
+    "arm64": {
+      "url": "https://github.com/ogzhncnmr/doupass/releases/download/v0.1.0-rc4/doupass_0.1.0-rc4_windows_arm64.zip",
+      "hash": "69c48136c57f832e3da2a58415b3024928c0fd20bb37ea5539cbc6139334fb5c"
+    }
+  },
+  "bin": "doupass.exe",
+  "checkver": {
+    "github": "https://github.com/ogzhncnmr/doupass"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/ogzhncnmr/doupass/releases/download/v$version/doupass_$version_windows_amd64.zip"
+      },
+      "arm64": {
+        "url": "https://github.com/ogzhncnmr/doupass/releases/download/v$version/doupass_$version_windows_arm64.zip"
+      }
+    },
+    "hash": {
+      "url": "https://github.com/ogzhncnmr/doupass/releases/download/v$version/checksums.txt"
+    }
+  }
+}

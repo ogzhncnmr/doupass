@@ -1,0 +1,20 @@
+PackageIdentifier: Ogzhncnmr.Doupass
+PackageVersion: 0.1.0-rc4
+PackageLocale: en-US
+Publisher: Ogzhncnmr
+PublisherUrl: https://github.com/ogzhncnmr
+PackageName: doupass
+PackageUrl: https://github.com/ogzhncnmr/doupass
+License: Apache-2.0
+LicenseUrl: https://github.com/ogzhncnmr/doupass/blob/main/LICENSE
+ShortDescription: Local-first policy engine for AI coding agents
+Description: One portable policy file governs tool calls across coding agents. MCP tool calls go through a proxy, harness-native tools through hooks; every decision lands in a tamper-evident local audit log.
+Moniker: doupass
+Tags:
+  - ai-agents
+  - claude-code
+  - mcp
+  - policy-engine
+  - security
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

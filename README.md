@@ -25,7 +25,11 @@ doupass log tail
 doupass log verify                                            # hash-chain tamper check
 ```
 
-Prebuilt release binaries arrive with the v0.1 tag.
+Prebuilt binaries (Linux/macOS/Windows, amd64+arm64) are on the [releases page](https://github.com/ogzhncnmr/doupass/releases); checksums are Sigstore-signed, see `packaging/README.md` for verification commands.
+
+## Playground
+
+Try the format without installing anything — decisions run locally in WebAssembly, nothing leaves the page: **https://ogzhncnmr.github.io/doupass/**
 
 ## Policy example
 
@@ -59,6 +63,8 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 - `doupass init --preset` — starter, minimal, locked-down, and red-team policies.
 - `doupass proxy` — transparent MCP stdio proxy with allow/deny/ask enforcement and fail-closed ask fallback.
 - `doupass hook claude` — Claude Code `PreToolUse` adapter emitting `permissionDecision` JSON; `allow` stays silent so the harness keeps its own permission flow.
+- `doupass decide` — generic JSON-in / decision-out endpoint for custom integrations.
+- `doupass install opencode --plugin` — native-tool enforcement for opencode via its plugin API.
 - `doupass install|uninstall claude` — idempotent `settings.json` merging with backups.
 - `doupass log tail|verify` — JSONL audit log with a SHA-256 hash chain and sensitive-argument masking.
 
@@ -70,6 +76,16 @@ The full format is specified in [`spec/policy-v0.md`](spec/policy-v0.md) with a 
 - [FAQ](docs/faq.md)
 - [Threat model](docs/threat-model.md)
 - [Policy format specification](spec/policy-v0.md)
+
+## Performance
+
+The decision path is allocation-free, so it can sit on every tool call:
+
+```
+BenchmarkDecide-12    1301170    1785 ns/op    0 B/op    0 allocs/op
+```
+
+Run it yourself: `go test ./internal/policy -bench=BenchmarkDecide -benchtime=2s -run=^$`
 
 ## Non-goals (v0.1)
 

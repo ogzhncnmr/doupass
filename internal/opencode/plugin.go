@@ -15,6 +15,7 @@ type PluginResult struct {
 }
 
 func InstallPlugin(pluginPath, binary string) (PluginResult, error) {
+	//#nosec G304 -- plugin path is chosen by the local user via --plugin-dir
 	if data, err := os.ReadFile(pluginPath); err == nil {
 		if strings.Contains(string(data), pluginMarker) {
 			return PluginResult{Path: pluginPath}, nil
@@ -37,6 +38,7 @@ func InstallPlugin(pluginPath, binary string) (PluginResult, error) {
 }
 
 func UninstallPlugin(pluginPath string) (PluginResult, error) {
+	//#nosec G304 -- plugin path is chosen by the local user via --plugin-dir
 	data, err := os.ReadFile(pluginPath)
 	if os.IsNotExist(err) {
 		return PluginResult{Path: pluginPath}, nil
