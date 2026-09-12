@@ -24,3 +24,5 @@ Thumbs.db
 web/doupass.wasm
 web/wasm_exec.js
 web/starter.yml
+/doupass.exe~
+
