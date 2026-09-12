@@ -11,6 +11,18 @@ import (
 	"github.com/ogzhncnmr/doupass/internal/policy"
 )
 
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "doupass-cli-test-home")
+	if err != nil {
+		panic(err)
+	}
+	_ = os.Setenv("HOME", home)
+	_ = os.Setenv("USERPROFILE", home)
+	code := m.Run()
+	_ = os.RemoveAll(home)
+	os.Exit(code)
+}
+
 func run(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	return runWithStdin(t, "", args...)
