@@ -31,6 +31,7 @@ func UnwrapServers(path string) (Result, error) {
 }
 
 func patchServers(path string, wrap bool) (Result, error) {
+	//#nosec G304 -- path is the opencode config file selected by the local user
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Result{Path: path}, err
@@ -101,10 +102,12 @@ func patchServers(path string, wrap bool) (Result, error) {
 	}
 	doc.Format()
 	backup := path + ".doupass.bak"
+	//#nosec G703 -- backup path derives from the user-selected config path
 	if err := os.WriteFile(backup, raw, 0o600); err != nil {
 		return Result{Path: path}, err
 	}
-	if err := os.WriteFile(path, doc.Pack(), 0o644); err != nil {
+	//#nosec G703,G306 -- config path is selected by the local user; 0600 protects embedded env values
+	if err := os.WriteFile(path, doc.Pack(), 0o600); err != nil {
 		return Result{Path: path}, err
 	}
 	return Result{Path: path, Changed: true, Backup: backup, Servers: count}, nil

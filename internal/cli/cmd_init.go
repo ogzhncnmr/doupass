@@ -65,9 +65,11 @@ func newInitCmd() *cobra.Command {
 			if _, err := os.Stat(target); err == nil && !force {
 				return fmt.Errorf("%s already exists (use --force to overwrite)", target)
 			}
+			//#nosec G301 -- the target is the user's project directory
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				return err
 			}
+			//#nosec G306 -- the starter policy is meant to be committed to the user's repository
 			if err := os.WriteFile(target, []byte(starterPolicy), 0o644); err != nil {
 				return err
 			}

@@ -102,6 +102,7 @@ func (a Action) rank() int {
 }
 
 func LoadFile(path string) (*Policy, error) {
+	//#nosec G304 -- path is the policy file selected by the local user
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

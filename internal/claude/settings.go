@@ -94,6 +94,7 @@ func UninstallHook(settingsPath string) (Result, error) {
 }
 
 func readSettings(path string) (map[string]any, []byte, error) {
+	//#nosec G304 -- path is the Claude Code settings file selected by the local user
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return map[string]any{}, nil, nil
@@ -127,10 +128,10 @@ func writeSettings(path string, settings map[string]any, original []byte, change
 			res.Backup = backup
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return res, err
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil {
+	if err := os.WriteFile(path, out, 0o600); err != nil {
 		return res, err
 	}
 	res.Changed = true

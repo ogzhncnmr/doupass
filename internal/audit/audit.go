@@ -159,6 +159,7 @@ func Verify(path string) (Result, error) {
 }
 
 func ReadAll(path string) ([]Entry, error) {
+	//#nosec G304 -- path is the audit log configured in the policy
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -190,6 +191,7 @@ func ReadAll(path string) ([]Entry, error) {
 }
 
 func readLastEntry(path string) (*Entry, error) {
+	//#nosec G304 -- path is the audit log configured in the policy
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -222,6 +224,7 @@ func acquireLock(path string, wait time.Duration) (func(), error) {
 	lockPath := path + ".lock"
 	deadline := time.Now().Add(wait)
 	for {
+		//#nosec G304 -- lock file path derives from the configured audit log path
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		if err == nil {
 			_ = f.Close()

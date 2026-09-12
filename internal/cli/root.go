@@ -3,11 +3,26 @@ package cli
 import (
 	"fmt"
 	"io"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var Version = "dev"
+
+func ResolvedVersion() string {
+	if Version != "dev" {
+		return Version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		v := info.Main.Version
+		if v != "" && v != "(devel)" {
+			return strings.TrimPrefix(v, "v")
+		}
+	}
+	return Version
+}
 
 func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	root := NewRootCmd()
@@ -43,7 +58,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the doupass version",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "doupass %s\n", Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "doupass %s\n", ResolvedVersion())
 			return nil
 		},
 	}

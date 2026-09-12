@@ -37,6 +37,19 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestResolvedVersion(t *testing.T) {
+	old := Version
+	defer func() { Version = old }()
+	Version = "1.2.3"
+	if got := ResolvedVersion(); got != "1.2.3" {
+		t.Fatalf("got %q, want 1.2.3", got)
+	}
+	Version = "dev"
+	if got := ResolvedVersion(); got != "dev" {
+		t.Fatalf("test binary should report dev, got %q", got)
+	}
+}
+
 func TestPolicyTestValidates(t *testing.T) {
 	out, _, err := run(t, "policy", "test", examplePolicy())
 	if err != nil {

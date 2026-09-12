@@ -75,6 +75,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if len(cfg.Command) == 0 {
 		return errors.New("proxy: no downstream command configured")
 	}
+	//#nosec G204 -- the downstream MCP server command is configured by the local user
 	cmd := exec.CommandContext(ctx, cfg.Command[0], cfg.Command[1:]...)
 	if cfg.Env != nil {
 		cmd.Env = cfg.Env
