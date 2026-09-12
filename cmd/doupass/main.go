@@ -1,9 +1,18 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+
+	"github.com/ogzhncnmr/doupass/internal/cli"
+)
 
 var version = "dev"
 
 func main() {
-	fmt.Printf("doupass %s\n", version)
+	cli.Version = version
+	if err := cli.Execute(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, "doupass:", err)
+		os.Exit(1)
+	}
 }
