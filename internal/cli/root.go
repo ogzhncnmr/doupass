@@ -50,6 +50,12 @@ Everyday flow:
   4. doupass log tail              review what agents actually did`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return cmd.Help()
+			}
+			return runLanding(cmd)
+		},
 	}
 	root.AddCommand(
 		newVersionCmd(),

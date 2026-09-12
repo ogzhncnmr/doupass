@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/ogzhncnmr/doupass/internal/audit"
 	"github.com/ogzhncnmr/doupass/internal/policy"
 )
@@ -338,6 +340,52 @@ func TestDoctorReportsMissingPolicy(t *testing.T) {
 	_, _, err := run(t, "doctor")
 	if err == nil || !strings.Contains(err.Error(), "problem") {
 		t.Fatalf("expected problems error, got %v", err)
+	}
+}
+
+func TestLandingStaticWithoutTerminal(t *testing.T) {
+	out, _, err := run(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Getting started", "doupass doctor", "interactive menu"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+func TestLandingMenuModel(t *testing.T) {
+	m := newLandingModel("test status")
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(landingModel)
+	if m.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1", m.cursor)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if len(m.chosen) != 2 || m.chosen[0] != "setup" || m.chosen[1] != "--dry-run" {
+		t.Fatalf("chosen = %v, want [setup --dry-run]", m.chosen)
+	}
+
+	wrapped := newLandingModel("")
+	updated, _ = wrapped.Update(tea.KeyMsg{Type: tea.KeyUp})
+	wrapped = updated.(landingModel)
+	if wrapped.cursor != len(landingChoices)-1 {
+		t.Fatalf("wrap-around cursor = %d, want %d", wrapped.cursor, len(landingChoices)-1)
+	}
+	updated, _ = wrapped.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	wrapped = updated.(landingModel)
+	if !wrapped.quit {
+		t.Fatal("q should quit")
+	}
+	if wrapped.chosen != nil {
+		t.Fatal("quitting should not choose a command")
+	}
+
+	view := newLandingModel("policy starter (18 rules)").View()
+	if !strings.Contains(view, "Show status") || !strings.Contains(view, "policy starter") {
+		t.Fatalf("view missing content:\n%s", view)
 	}
 }
 
