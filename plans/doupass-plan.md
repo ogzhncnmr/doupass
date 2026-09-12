@@ -1,6 +1,6 @@
 # doupass — Ajan Politikası Motoru + Taşınabilir Politika Formatı
 
-Durum: S0 tamamlandı; adversarial review bulguları entegre
+Durum: S0–S9 uygulandı; v0.1.0-rc3 yayınlandı. Bekleyen: S7.5 saha doğrulaması (5 katılımcı) ve S9 paylaşımları (kullanıcı hesapları).
 Tarih: 2026-09-12
 Hedef: Ajanların araç çağrılarını yerel olarak denetleyen, taşınabilir açık politika formatı (agents için Sigma) + local-first tek-binary runtime politika motoru.
 

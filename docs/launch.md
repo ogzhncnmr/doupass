@@ -2,7 +2,7 @@
 
 Everything below is copy-paste ready. Posting requires the maintainer's own accounts — that is the only part that cannot be automated.
 
-Release verified: `v0.1.0-rc1` (prerelease) with signed-off checksums, binaries for Linux/macOS (amd64+arm64) and Windows.
+Release verified: `v0.1.0-rc3` (prerelease) with checksums, binaries for Linux/macOS (amd64+arm64) and Windows.
 
 ## Demo recording script (60 seconds)
 
