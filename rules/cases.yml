@@ -197,3 +197,43 @@ cases:
     policy: starter.yml
     call: { surface: hook, tool: Read, args: { file_path: "${WORKSPACE}/src/main.go" } }
     expect: { action: allow, rule: allow-workspace }
+
+  - name: env-root-relative-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: ".env" } }
+    expect: { action: deny, rule: block-env-files }
+
+  - name: env-nested-relative-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "server/.env.local" } }
+    expect: { action: deny, rule: block-env-files }
+
+  - name: env-lookalike-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "envelope.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: kubeconfig-root-relative-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: ".kube/config" } }
+    expect: { action: deny, rule: block-kubeconfig }
+
+  - name: ssh-directory-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.ssh" } }
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: ssh-similar-name-negative
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "${HOME}/.sshx/notes.txt" } }
+    expect: { action: allow, rule: "" }
+
+  - name: windows-backslash-ssh-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "C:\\Users\\dev\\.ssh\\id_ed25519" } }
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: windows-traversal-denied
+    policy: starter.yml
+    call: { surface: hook, tool: Read, args: { file_path: "docs\\..\\.ssh\\config" } }
+    expect: { action: deny, rule: block-ssh-credentials }

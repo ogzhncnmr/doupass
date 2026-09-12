@@ -40,24 +40,37 @@ func patternExpr(raw string) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString("(?s)^")
-	for i := 0; i < len(raw); i++ {
-		switch c := raw[i]; c {
-		case '*':
-			for i+1 < len(raw) && raw[i+1] == '*' {
+	i := 0
+	for i < len(raw) {
+		switch c := raw[i]; {
+		case c == '*' && strings.HasPrefix(raw[i:], "**/"):
+			b.WriteString("(?:.*/)?")
+			i += 3
+		case c == '*':
+			for i < len(raw) && raw[i] == '*' {
 				i++
 			}
 			b.WriteString(".*")
-		case '?':
+		case c == '?':
 			b.WriteString(".")
-		case '\\':
+			i++
+		case c == '\\':
 			if i+1 < len(raw) {
 				i++
 				b.WriteString(regexp.QuoteMeta(string(raw[i])))
 			} else {
 				b.WriteString(regexp.QuoteMeta("\\"))
 			}
+			i++
+		case c == '/' && strings.HasPrefix(raw[i:], "/**/"):
+			b.WriteString("/(?:.*/)?")
+			i += 4
+		case c == '/' && raw[i:] == "/**":
+			b.WriteString("(?:/.*)?")
+			i += 3
 		default:
 			b.WriteString(regexp.QuoteMeta(string(c)))
+			i++
 		}
 	}
 	b.WriteString("$")
@@ -82,19 +95,39 @@ func (p *pattern) matchCandidates(s string, opts Options) bool {
 	if expanded != s && p.match(expanded, false) {
 		return true
 	}
-	if looksLikePath(expanded) {
-		canonical := canonicalizePath(expanded, opts)
-		if p.match(canonical, opts.CaseFold) {
-			return true
-		}
+	if !pathCandidate(expanded) {
+		return false
 	}
-	return false
+	return p.match(canonicalizePath(expanded, opts), opts.CaseFold)
+}
+
+// pathCandidate reports whether a value is worth canonicalizing: explicit
+// paths always, plus space-free relative traversals like "docs/../.ssh/x",
+// which need workspace-joined cleanup before deny rules can see them. Command
+// strings (spaces) are never joined, so broad ${WORKSPACE} allow rules cannot
+// start matching commands that merely contain a slash.
+func pathCandidate(s string) bool {
+	if looksLikePath(s) {
+		return true
+	}
+	if strings.ContainsAny(s, " \t\n\"'") {
+		return false
+	}
+	return strings.Contains(s, "..")
 }
 
 func expandVars(s string, opts Options) string {
-	s = strings.ReplaceAll(s, "${HOME}", opts.Home)
-	s = strings.ReplaceAll(s, "${WORKSPACE}", opts.Workspace)
+	if opts.Home != "" {
+		s = strings.ReplaceAll(s, "${HOME}", toSlash(opts.Home))
+	}
+	if opts.Workspace != "" {
+		s = strings.ReplaceAll(s, "${WORKSPACE}", toSlash(opts.Workspace))
+	}
 	return s
+}
+
+func toSlash(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
 }
 
 func canonicalizePath(s string, opts Options) string {

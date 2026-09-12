@@ -70,9 +70,18 @@ A rule matches a call when **every** present field in `match` matches:
 By default a pattern is a **glob**:
 
 - `*` — any sequence of characters, including `/`.
-- `**` — same as `*`; allowed for readability in path patterns.
+- `**` — same as `*` when written alone; in path patterns the slash-anchored
+  forms follow gitignore conventions:
+  - a leading `**/` matches **zero or more** leading directories, so
+    `**/.env*` matches both `app/.env` and a root-level `.env`;
+  - a trailing `/**` matches the directory **itself** as well as everything
+    inside it, so `**/.ssh/**` covers `~/.ssh`, not only files inside it;
+  - an interior `/**/` matches zero or more directories, so `a/**/b` matches
+    `a/b` and `a/x/b`.
 - `?` — exactly one character.
-- `\` — escapes the next character (use `\\` for a literal backslash).
+- `\` — escapes the next character (use `\\` for a literal backslash). Patterns
+  are written with `/` separators; `${HOME}` and `${WORKSPACE}` always expand to
+  `/`-separated forms so both sides agree on every OS.
 
 A pattern starting with `re:` is a **regular expression** instead (Go RE2 syntax). It must match the entire string; doupass anchors it automatically.
 
@@ -81,7 +90,7 @@ A pattern starting with `re:` is a **regular expression** instead (Go RE2 syntax
 To prevent trivial bypasses, path-like argument values are also matched in canonical form. Before matching, for each argument value doupass:
 
 1. expands `${HOME}` and `${WORKSPACE}` variables and a leading `~`;
-2. canonicalizes when the value looks like a path: starts with `/`, `~`, `./`, `../`, `.\\`, `..\\`, or a drive letter such as `C:\`;
+2. canonicalizes when the value looks like a path: starts with `/`, `~`, `./`, `../`, `.\\`, `..\\`, or a drive letter such as `C:\`. Space-free relative traversals such as `docs/../.ssh/x` are also resolved against the workspace; values containing spaces are treated as command strings and are never joined to the workspace;
 3. makes relative paths absolute against the workspace root;
 4. applies `filepath.Clean`, resolves symlinks when the path exists, converts separators to `/`;
 5. case-folds the value and the path patterns on Windows.

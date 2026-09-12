@@ -254,3 +254,57 @@ cases:
       args:
         file_path: "/etc/hosts"
     expect: { action: allow, rule: "" }
+
+  - name: env-file-root-relative-denied
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Read
+      args:
+        file_path: ".env"
+    expect: { action: deny, rule: block-env-files }
+
+  - name: ssh-directory-itself-denied
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Read
+      args:
+        file_path: "${HOME}/.ssh"
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: workspace-root-allowed
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Read
+      args:
+        file_path: "${WORKSPACE}"
+    expect: { action: allow, rule: allow-workspace }
+
+  - name: windows-backslash-ssh-denied
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Read
+      args:
+        file_path: "C:\\Users\\dev\\.ssh\\id_rsa"
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: relative-traversal-ssh-denied
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Read
+      args:
+        file_path: "docs/../.ssh/id_rsa"
+    expect: { action: deny, rule: block-ssh-credentials }
+
+  - name: command-slash-never-matches-workspace-allow
+    policy: ../examples/default-dev.yml
+    call:
+      surface: hook
+      tool: Bash
+      args:
+        command: "curl https://api.example.com/v1/x"
+    expect: { action: allow, rule: "" }

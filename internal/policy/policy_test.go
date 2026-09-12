@@ -456,3 +456,126 @@ rules:
 		t.Fatalf("got %+v, want first rule reason", got)
 	}
 }
+
+func TestDoubleStarAnchoring(t *testing.T) {
+	engine := newTestEngine(t, `
+version: "0.1"
+defaults: { action: allow }
+rules:
+  - id: block-env
+    match: { args: { "*": "**/.env*" } }
+    action: deny
+    reason: secrets
+  - id: block-ssh
+    match: { args: { "*": "**/.ssh/**" } }
+    action: deny
+    reason: ssh
+`, Options{Home: "/home/dev", Workspace: "/work"})
+
+	cases := []struct {
+		note string
+		want Action
+		arg  string
+	}{
+		{"bare .env at root", ActionDeny, ".env"},
+		{"root .env.local", ActionDeny, ".env.production"},
+		{"nested .env", ActionDeny, "app/.env"},
+		{"plain file not env", ActionAllow, "envelope.txt"},
+		{"dot-tail not env", ActionAllow, "app/config.envd"},
+		{"ssh dir itself", ActionDeny, "/home/dev/.ssh"},
+		{"ssh file", ActionDeny, "/home/dev/.ssh/id_rsa"},
+		{"relative ssh dir", ActionDeny, ".ssh"},
+		{"other dir", ActionAllow, "/home/dev/.sshx"},
+	}
+	for _, tc := range cases {
+		got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"file_path": tc.arg}})
+		if got.Action != tc.want {
+			t.Errorf("%s: got %s (%s), want %s", tc.note, got.Action, got.RuleID, tc.want)
+		}
+	}
+}
+
+func TestInteriorDoubleStar(t *testing.T) {
+	engine := newTestEngine(t, `
+version: "0.1"
+defaults: { action: allow }
+rules:
+  - id: block-vendor-tests
+    match: { args: { "*": "vendor/**/testdata/*.json" } }
+    action: deny
+    reason: tests
+`, Options{})
+
+	for _, arg := range []string{"vendor/testdata/x.json", "vendor/a/testdata/x.json", "vendor/a/b/testdata/x.json"} {
+		if got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"f": arg}}); got.Action != ActionDeny {
+			t.Errorf("%q: got %s, want deny", arg, got.Action)
+		}
+	}
+	if got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"f": "vendor/testdata/x.yaml"}}); got.Action != ActionAllow {
+		t.Errorf("vendor yaml should be allowed, got %s", got.Action)
+	}
+}
+
+func TestWindowsHomeExpansion(t *testing.T) {
+	engine := newTestEngine(t, `
+version: "0.1"
+defaults: { action: allow }
+rules:
+  - id: block-ssh
+    match: { args: { "*": "${HOME}/.ssh/**" } }
+    action: deny
+    reason: ssh
+  - id: allow-workspace
+    match: { args: { "*": "${WORKSPACE}/**" } }
+    action: allow
+    reason: workspace
+`, Options{Home: `C:\Users\dev`, Workspace: `C:\work`})
+
+	denyCases := []string{
+		`C:\Users\dev\.ssh\id_rsa`,
+		"C:/Users/dev/.ssh/id_rsa",
+		`${HOME}\.ssh\id_rsa`,
+	}
+	for _, arg := range denyCases {
+		got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"file_path": arg}})
+		if got.Action != ActionDeny {
+			t.Errorf("%q: got %s (%s), want deny", arg, got.Action, got.RuleID)
+		}
+	}
+	got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"file_path": `C:\work\main.go`}})
+	if got.Action != ActionAllow || got.RuleID != "allow-workspace" {
+		t.Errorf("workspace path: got %s (%s), want allow via allow-workspace", got.Action, got.RuleID)
+	}
+}
+
+func TestRelativeTraversalResolvesWorkspace(t *testing.T) {
+	engine := newTestEngine(t, `
+version: "0.1"
+defaults: { action: allow }
+rules:
+  - id: block-ssh
+    match: { args: { "*": "**/.ssh/**" } }
+    action: deny
+    reason: ssh
+`, Options{Home: "/home/dev", Workspace: "/work"})
+
+	for _, arg := range []string{"docs/../.ssh/id_rsa", "sub/../../.ssh/id_rsa"} {
+		got := engine.Decide(Call{Surface: "hook", Tool: "Read", Args: map[string]any{"file_path": arg}})
+		if got.Action != ActionDeny {
+			t.Errorf("%q: got %s, want deny", arg, got.Action)
+		}
+	}
+}
+
+func newTestEngine(t *testing.T, policyYAML string, opts Options) *Engine {
+	t.Helper()
+	p, err := Parse([]byte(policyYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(p, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
