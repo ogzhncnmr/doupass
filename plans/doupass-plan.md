@@ -138,7 +138,7 @@ audit:
   hash_chain: true
 ```
 
-**Eşleştirme semantiği:** glob + regex; kurallar sırayla değerlendirilir, ilk eşleşen kazanır; aynı özgüllükte `deny > ask > allow`. (Spec'te tam olarak tanımlanır.)
+**Eşleştirme semantiği:** glob + regex; tüm eşleşen kurallar arasında öncelik sıra bağımsız `deny > ask > allow > log`; kural sırası yalnızca raporlanan kuralı/reason'ı etkiler. (S1 spec'te donduruldu.)
 
 **Tehdit modeli (özet):**
 - Prompt injection sonrası MCP exfiltration → proxy deny + audit.

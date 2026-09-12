@@ -1,0 +1,99 @@
+version: "0.1"
+name: default-dev
+
+defaults:
+  action: allow
+  ask_fallback: deny
+  ask_timeout_seconds: 60
+
+audit:
+  path: "~/.doupass/audit.jsonl"
+  hash_chain: true
+
+rules:
+  - id: block-ssh-credentials
+    match:
+      args:
+        "*": "**/.ssh/**"
+    action: deny
+    reason: "SSH credentials are off-limits"
+
+  - id: block-aws-credentials
+    match:
+      args:
+        "*": "**/.aws/**"
+    action: deny
+    reason: "AWS credentials are off-limits"
+
+  - id: block-env-files
+    match:
+      args:
+        "*": "**/.env*"
+    action: deny
+    reason: "Environment files may contain secrets"
+
+  - id: block-kubeconfig
+    match:
+      args:
+        "*": "**/.kube/config"
+    action: deny
+    reason: "Kubernetes credentials are off-limits"
+
+  - id: ask-npm-install
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*npm install*"
+    action: ask
+    reason: "Package installs run lifecycle scripts"
+
+  - id: ask-git-force-push
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*git push*--force*"
+    action: ask
+    reason: "Force push may destroy remote history"
+
+  - id: deny-rm-root
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*rm -rf /*"
+    action: deny
+    reason: "Refusing recursive delete of root paths"
+
+  - id: ask-rm-recursive
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*rm -rf*"
+    action: ask
+    reason: "Recursive delete needs confirmation"
+
+  - id: ask-curl-data
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*curl*-d*"
+    action: ask
+    reason: "POSTing data with curl can exfiltrate files"
+
+  - id: deny-drop-table
+    match:
+      args:
+        "*": "*DROP TABLE*"
+    action: deny
+    reason: "Destructive SQL is not allowed"
+
+  - id: allow-workspace
+    match:
+      args:
+        "*": "${WORKSPACE}/**"
+    action: allow
+    reason: "Workspace access is expected"

@@ -1,0 +1,33 @@
+version: "0.1"
+name: locked-down
+
+defaults:
+  action: deny
+  unknown_server: deny
+  ask_fallback: deny
+
+audit:
+  path: "~/.doupass/audit.jsonl"
+  hash_chain: true
+
+rules:
+  - id: allow-hook-reads
+    match:
+      surface: hook
+      tool: "re:^(Read|Glob|Grep)$"
+    action: allow
+    reason: "Read-only environment"
+
+  - id: allow-local-mcp-reads
+    match:
+      surface: mcp
+      server: "local-*"
+      tool: "re:^(read_.*|list_.*)$"
+    action: allow
+    reason: "Read-only access to local MCP servers"
+
+  - id: deny-writes
+    match:
+      tool: "re:^(Write|Edit|NotebookEdit|write_.*|edit_.*|delete_.*)$"
+    action: deny
+    reason: "Writes are not allowed in this environment"

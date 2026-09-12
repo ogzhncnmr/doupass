@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/ogzhncnmr/doupass/main/spec/policy-v0.schema.json",
+  "title": "doupass policy v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules", "defaults"],
+  "properties": {
+    "version": { "const": "0.1" },
+    "name": { "type": "string", "minLength": 1 },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "defaults": { "$ref": "#/$defs/defaults" },
+    "audit": { "$ref": "#/$defs/audit" }
+  },
+  "$defs": {
+    "action": { "enum": ["allow", "deny", "ask", "log"] },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "match", "action"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+        "match": { "$ref": "#/$defs/match" },
+        "action": { "$ref": "#/$defs/action" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "surface": { "enum": ["hook", "mcp", "any"] },
+        "tool": { "type": "string", "minLength": 1 },
+        "server": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "unknown_server": { "enum": ["allow", "deny", "ask"] },
+        "ask_fallback": { "enum": ["allow", "deny"] },
+        "ask_timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "hash_chain": { "type": "boolean" }
+      }
+    }
+  }
+}
