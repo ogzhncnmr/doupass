@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/ogzhncnmr/doupass/internal/claude"
+	"github.com/ogzhncnmr/doupass/internal/opencode"
 	"github.com/spf13/cobra"
 )
 
@@ -14,9 +16,21 @@ func newInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "Install harness integrations",
 	}
-	cmd.PersistentFlags().String("settings", "", "settings file (default: ~/.claude/settings.json)")
-	cmd.PersistentFlags().String("command", "doupass hook claude", "hook command to register")
-	cmd.AddCommand(&cobra.Command{
+	cmd.AddCommand(newInstallClaudeCmd(), newInstallOpenCodeCmd())
+	return cmd
+}
+
+func newUninstallCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove harness integrations",
+	}
+	cmd.AddCommand(newUninstallClaudeCmd(), newUninstallOpenCodeCmd())
+	return cmd
+}
+
+func newInstallClaudeCmd() *cobra.Command {
+	cmd := &cobra.Command{
 		Use:   "claude",
 		Short: "Register the doupass PreToolUse hook in Claude Code settings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -40,17 +54,14 @@ func newInstallCmd() *cobra.Command {
 			}
 			return nil
 		},
-	})
+	}
+	cmd.Flags().String("settings", "", "settings file (default: ~/.claude/settings.json)")
+	cmd.Flags().String("command", "doupass hook claude", "hook command to register")
 	return cmd
 }
 
-func newUninstallCmd() *cobra.Command {
+func newUninstallClaudeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "uninstall",
-		Short: "Remove harness integrations",
-	}
-	cmd.PersistentFlags().String("settings", "", "settings file (default: ~/.claude/settings.json)")
-	cmd.AddCommand(&cobra.Command{
 		Use:   "claude",
 		Short: "Remove the doupass PreToolUse hook from Claude Code settings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -70,7 +81,63 @@ func newUninstallCmd() *cobra.Command {
 			}
 			return nil
 		},
-	})
+	}
+	cmd.Flags().String("settings", "", "settings file (default: ~/.claude/settings.json)")
+	return cmd
+}
+
+func newInstallOpenCodeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "opencode",
+		Short: "Wrap local MCP servers in the opencode config with the doupass proxy",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := opencodeConfigPath(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := opencode.WrapServers(path)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "wrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+				if res.Backup != "" {
+					fmt.Fprintf(out, "backup: %s\n", res.Backup)
+				}
+			} else {
+				fmt.Fprintf(out, "nothing to wrap in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
+	return cmd
+}
+
+func newUninstallOpenCodeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "opencode",
+		Short: "Unwrap doupass-wrapped MCP servers in the opencode config",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := opencodeConfigPath(cmd)
+			if err != nil {
+				return err
+			}
+			res, err := opencode.UnwrapServers(path)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if res.Changed {
+				fmt.Fprintf(out, "unwrapped %d MCP server(s) in %s\n", res.Servers, res.Path)
+			} else {
+				fmt.Fprintf(out, "no doupass-wrapped servers found in %s\n", res.Path)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
 	return cmd
 }
 
@@ -83,4 +150,23 @@ func claudeSettingsPath(cmd *cobra.Command) (string, error) {
 		return "", errors.New("cannot determine home directory; pass --settings")
 	}
 	return filepath.Join(home, ".claude", "settings.json"), nil
+}
+
+func opencodeConfigPath(cmd *cobra.Command) (string, error) {
+	if p, _ := cmd.Flags().GetString("config"); p != "" {
+		return expandHome(p), nil
+	}
+	candidates := []string{"opencode.json", "opencode.jsonc"}
+	if home := homeDir(); home != "" {
+		candidates = append(candidates,
+			filepath.Join(home, ".config", "opencode", "opencode.json"),
+			filepath.Join(home, ".config", "opencode", "opencode.jsonc"),
+		)
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	return "", errors.New("no opencode config found (looked for opencode.json[c] and ~/.config/opencode/opencode.json[c]); pass --config")
 }

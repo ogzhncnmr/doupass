@@ -196,3 +196,39 @@ func TestInstallAndUninstallClaude(t *testing.T) {
 		t.Fatalf("hook still present: %s", data)
 	}
 }
+
+func TestInstallAndUninstallOpenCode(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "opencode.json")
+	body := `{"mcp": {"fs": {"type": "local", "command": ["npx", "-y", "server-fs", "."]}}}`
+	if err := os.WriteFile(config, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "install", "opencode", "--config", config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "wrapped 1 MCP server") {
+		t.Fatalf("out = %q", out)
+	}
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"doupass"`) {
+		t.Fatalf("config = %s", data)
+	}
+	out, _, err = run(t, "uninstall", "opencode", "--config", config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "unwrapped 1 MCP server") {
+		t.Fatalf("out = %q", out)
+	}
+	data, err = os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "doupass") {
+		t.Fatalf("config = %s", data)
+	}
+}
