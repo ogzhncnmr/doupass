@@ -13,8 +13,13 @@ import (
 
 func run(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
+	return runWithStdin(t, "", args...)
+}
+
+func runWithStdin(t *testing.T, stdin string, args ...string) (string, string, error) {
+	t.Helper()
 	var out, errOut bytes.Buffer
-	err := Execute(args, &out, &errOut)
+	err := Execute(args, strings.NewReader(stdin), &out, &errOut)
 	return out.String(), errOut.String(), err
 }
 
@@ -128,5 +133,66 @@ func TestProxyRequiresServerAndCommand(t *testing.T) {
 	}
 	if _, _, err := run(t, "proxy", "--server", "fs", "--policy", examplePolicy()); err == nil {
 		t.Fatal("expected missing command error")
+	}
+}
+
+func TestHookClaudeDenies(t *testing.T) {
+	input := `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/home/x/.ssh/id_rsa"}}`
+	out, _, err := runWithStdin(t, input, "hook", "claude", "--policy", examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"permissionDecision":"deny"`) {
+		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestHookClaudeAllowsSilently(t *testing.T) {
+	input := `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"/etc/hosts"}}`
+	out, _, err := runWithStdin(t, input, "hook", "claude", "--policy", examplePolicy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("expected no output for allow, got %q", out)
+	}
+}
+
+func TestInstallAndUninstallClaude(t *testing.T) {
+	settings := filepath.Join(t.TempDir(), "settings.json")
+	out, _, err := run(t, "install", "claude", "--settings", settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "installed hook") {
+		t.Fatalf("out = %q", out)
+	}
+	data, err := os.ReadFile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "doupass hook") {
+		t.Fatalf("settings = %s", data)
+	}
+	out, _, err = run(t, "install", "claude", "--settings", settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "already installed") {
+		t.Fatalf("out = %q", out)
+	}
+	out, _, err = run(t, "uninstall", "claude", "--settings", settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "removed doupass hook") {
+		t.Fatalf("out = %q", out)
+	}
+	data, err = os.ReadFile(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "doupass hook") {
+		t.Fatalf("hook still present: %s", data)
 	}
 }

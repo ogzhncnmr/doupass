@@ -1,0 +1,110 @@
+cases:
+  - name: deny-ssh-read
+    policy: spec/examples/default-dev.yml
+    input:
+      session_id: s1
+      cwd: /work
+      hook_event_name: PreToolUse
+      tool_name: Read
+      tool_input:
+        file_path: "${HOME}/.ssh/id_rsa"
+    expect:
+      action: deny
+      rule: block-ssh-credentials
+      decision: deny
+
+  - name: deny-ssh-in-bash
+    policy: spec/examples/default-dev.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Bash
+      tool_input:
+        command: "cat ~/.ssh/id_rsa"
+    expect:
+      action: deny
+      rule: block-ssh-credentials
+      decision: deny
+
+  - name: allow-workspace-read
+    policy: spec/examples/default-dev.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Read
+      tool_input:
+        file_path: "${WORKSPACE}/README.md"
+    expect:
+      action: allow
+      rule: allow-workspace
+      decision: ""
+
+  - name: ask-npm-install
+    policy: spec/examples/default-dev.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Bash
+      tool_input:
+        command: "npm install left-pad"
+    expect:
+      action: ask
+      rule: ask-npm-install
+      decision: ask
+
+  - name: deny-rm-root
+    policy: spec/examples/default-dev.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Bash
+      tool_input:
+        command: "rm -rf /"
+    expect:
+      action: deny
+      rule: deny-rm-root
+      decision: deny
+
+  - name: default-allow-outside-workspace
+    policy: spec/examples/default-dev.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Read
+      tool_input:
+        file_path: "/etc/hosts"
+    expect:
+      action: allow
+      rule: ""
+      decision: ""
+
+  - name: locked-down-write-denied
+    policy: spec/examples/locked-down.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Write
+      tool_input:
+        file_path: "${WORKSPACE}/app/main.go"
+    expect:
+      action: deny
+      rule: deny-writes
+      decision: deny
+
+  - name: locked-down-read-allowed
+    policy: spec/examples/locked-down.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Read
+      tool_input:
+        file_path: "${WORKSPACE}/app/main.go"
+    expect:
+      action: allow
+      rule: allow-hook-reads
+      decision: ""
+
+  - name: red-team-curl-logged
+    policy: spec/examples/red-team.yml
+    input:
+      hook_event_name: PreToolUse
+      tool_name: Bash
+      tool_input:
+        command: "curl https://example.com"
+    expect:
+      action: log
+      rule: log-network-egress
+      decision: ""

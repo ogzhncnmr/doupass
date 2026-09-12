@@ -9,9 +9,10 @@ import (
 
 var Version = "dev"
 
-func Execute(args []string, stdout, stderr io.Writer) error {
+func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	root := NewRootCmd()
 	root.SetArgs(args)
+	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	return root.Execute()
@@ -30,6 +31,9 @@ func NewRootCmd() *cobra.Command {
 		newPolicyCmd(),
 		newProxyCmd(),
 		newLogCmd(),
+		newHookCmd(),
+		newInstallCmd(),
+		newUninstallCmd(),
 	)
 	return root
 }
