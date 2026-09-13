@@ -10,6 +10,7 @@ import (
 
 	"github.com/ogzhncnmr/doupass/internal/claude"
 	"github.com/ogzhncnmr/doupass/internal/codex"
+	"github.com/ogzhncnmr/doupass/internal/fsutil"
 	"github.com/ogzhncnmr/doupass/internal/mcpjson"
 	"github.com/ogzhncnmr/doupass/internal/opencode"
 	"github.com/spf13/cobra"
@@ -123,7 +124,7 @@ func ensureStarterPolicy() (string, error) {
 		return "", err
 	}
 	//#nosec G306 -- the policy lives under the user's home directory
-	return path, os.WriteFile(path, data, 0o600)
+	return path, fsutil.WriteFileAtomic(path, data, 0o600)
 }
 
 func wrapResultRow(row setupRow, changed bool, servers int, err error) setupRow {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ogzhncnmr/doupass/internal/fsutil"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ func newInitCmd() *cobra.Command {
 				return err
 			}
 			//#nosec G306 -- the starter policy is meant to be committed to the user's repository
-			if err := os.WriteFile(target, data, 0o644); err != nil {
+			if err := fsutil.WriteFileAtomic(target, data, 0o644); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s wrote %s (preset %s)\n", stateGlyph("ok"), target, preset)
