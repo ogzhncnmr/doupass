@@ -52,6 +52,10 @@ echo "== 1. init: ready-made policy, zero YAML writing =="
 OUT=$("$DOUPASS" init --dir "$WORK" 2>&1)
 assert_contains "init writes starter policy" "$OUT" "wrote"
 POLICY="$WORK/doupass.yml"
+OUT=$("$DOUPASS" init --dir "$WORK" 2>&1 || true)
+assert_contains "second init refuses to overwrite" "$OUT" "already exists"
+OUT=$("$DOUPASS" init --preset starter --force --dir "$WORK" 2>&1)
+assert_contains "policy updates in place with --force" "$OUT" "wrote"
 
 echo "== 2. policy engine: real Windows-path protections =="
 decide() { "$DOUPASS" decide --policy "$POLICY" --input "$SB/call.json" 2>&1; }
