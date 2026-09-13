@@ -50,7 +50,7 @@ rules:
       surface: hook
       tool: Bash
       args:
-        command: re:.*\b(scp|sftp|rsync)\b.*\b\w+@[\w.-]+:.*
+        command: re:.*\b(scp|sftp|rsync)\b.*\b(\w+@)?[\w.-]+:.*
     action: log
     reason: "Outbound file transfers are recorded"
 

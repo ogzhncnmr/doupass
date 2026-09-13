@@ -182,7 +182,7 @@ rules:
       surface: hook
       tool: Bash
       args:
-        command: re:.*(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z|da|fi|k)?sh\b.*
+        command: re:.*\b(curl|wget)\b.*\|\s*(sudo\s+)?(ba|z|da|fi|k)?sh\b.*
     action: ask
     reason: "Piping a download straight into a shell runs unverified code"
 
@@ -191,7 +191,7 @@ rules:
       surface: hook
       tool: Bash
       args:
-        command: re:.*\b(scp|sftp|rsync)\b.*\b\w+@[\w.-]+:.*
+        command: re:.*\b(scp|sftp|rsync)\b.*\b(\w+@)?[\w.-]+:.*
     action: ask
     reason: "Outbound file transfers need confirmation"
 
