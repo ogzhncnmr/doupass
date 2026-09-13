@@ -17,6 +17,9 @@ func (g *processGroup) configure(cmd *exec.Cmd) {
 
 func (g *processGroup) attach(_ *exec.Cmd) error { return nil }
 
+// detach mirrors the Windows API so the shared Run code compiles unchanged.
+func (g *processGroup) detach() {}
+
 func (g *processGroup) kill(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
