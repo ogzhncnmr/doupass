@@ -61,7 +61,7 @@ doupass uninstall opencode
 Automatic (native tools plugin):
 
 ```sh
-doupass install opencode --plugin               # writes .opencode/plugin/doupass.js
+doupass install opencode --plugin               # writes ~/.config/opencode/plugin/doupass.js
 doupass uninstall opencode --plugin
 ```
 
