@@ -150,8 +150,7 @@ func newInstallOpenCodeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withPlugin, _ := cmd.Flags().GetBool("plugin")
 			if withPlugin {
-				dir, _ := cmd.Flags().GetString("plugin-dir")
-				pluginPath := filepath.Join(expandHome(dir), "doupass.js")
+				pluginPath := filepath.Join(opencodePluginDir(cmd), "doupass.js")
 				binary, err := os.Executable()
 				if err != nil {
 					binary = "doupass"
@@ -191,7 +190,7 @@ func newInstallOpenCodeCmd() *cobra.Command {
 	}
 	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
 	cmd.Flags().Bool("plugin", false, "install the native-tool plugin instead of wrapping MCP servers")
-	cmd.Flags().String("plugin-dir", filepath.Join(".opencode", "plugin"), "directory for the plugin file (with --plugin)")
+	cmd.Flags().String("plugin-dir", "", "directory for the plugin file (default: ~/.config/opencode/plugin; with --plugin)")
 	return cmd
 }
 
@@ -202,8 +201,7 @@ func newUninstallOpenCodeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			withPlugin, _ := cmd.Flags().GetBool("plugin")
 			if withPlugin {
-				dir, _ := cmd.Flags().GetString("plugin-dir")
-				res, err := opencode.UninstallPlugin(filepath.Join(expandHome(dir), "doupass.js"))
+				res, err := opencode.UninstallPlugin(filepath.Join(opencodePluginDir(cmd), "doupass.js"))
 				if err != nil {
 					return err
 				}
@@ -234,8 +232,21 @@ func newUninstallOpenCodeCmd() *cobra.Command {
 	}
 	cmd.Flags().String("config", "", "opencode config file (default: ./opencode.json[c] or ~/.config/opencode/opencode.json[c])")
 	cmd.Flags().Bool("plugin", false, "remove the native-tool plugin instead of unwrapping MCP servers")
-	cmd.Flags().String("plugin-dir", filepath.Join(".opencode", "plugin"), "directory for the plugin file (with --plugin)")
+	cmd.Flags().String("plugin-dir", "", "directory for the plugin file (default: ~/.config/opencode/plugin; with --plugin)")
 	return cmd
+}
+
+// opencodePluginDir resolves the plugin location: the global opencode
+// directory by default (what doctor and the menu count), or wherever
+// --plugin-dir points for a project-local install.
+func opencodePluginDir(cmd *cobra.Command) string {
+	if dir, _ := cmd.Flags().GetString("plugin-dir"); dir != "" {
+		return expandHome(dir)
+	}
+	if home := homeDir(); home != "" {
+		return filepath.Join(home, ".config", "opencode", "plugin")
+	}
+	return filepath.Join(".opencode", "plugin")
 }
 
 func newInstallCodexCmd() *cobra.Command {

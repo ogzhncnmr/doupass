@@ -522,6 +522,21 @@ func TestLandingPresetStaleInfoRechecked(t *testing.T) {
 	}
 }
 
+func TestOpencodePluginDirDefault(t *testing.T) {
+	explicit := newInstallOpenCodeCmd()
+	if err := explicit.Flags().Set("plugin-dir", "~/plugs"); err != nil {
+		t.Fatal(err)
+	}
+	if got := opencodePluginDir(explicit); got != expandHome("~/plugs") {
+		t.Fatalf("explicit --plugin-dir = %q, want %q", got, expandHome("~/plugs"))
+	}
+	def := newInstallOpenCodeCmd()
+	want := filepath.Join(homeDir(), ".config", "opencode", "plugin")
+	if got := opencodePluginDir(def); got != want {
+		t.Fatalf("default plugin dir = %q, want %q (the location doctor counts)", got, want)
+	}
+}
+
 func TestLandingStatusRows(t *testing.T) {
 	healthy := landingModel{choices: landingChoices, info: landingInfo{
 		Found: true, PolicyName: "starter", Rules: 18,
