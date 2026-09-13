@@ -22,6 +22,7 @@ assert_not_contains() {
 
 echo "== build =="
 $GO build -o "$DOUPASS" ./cmd/doupass || { echo "build failed"; exit 1; }
+case "$DOUPASS" in /*) ;; *) DOUPASS="$(pwd)/${DOUPASS#./}" ;; esac
 ok "go build"
 
 SB=$(mktemp -d)
@@ -33,6 +34,9 @@ export AppData="$APPDATA"
 export XDG_CONFIG_HOME="$SB/xdg"
 mkdir -p "$APPDATA/Code/User/globalStorage/saoudrizwan.claude-dev/settings" "$SB/work"
 WORK=$(cd "$SB/work" && pwd)
+# Run everything from the sandbox HOME so a doupass.yml in the developer's
+# checkout can never stand in for the policy the test is building.
+cd "$SB"
 
 echo "== sandbox fixtures =="
 printf '{}' > "$SB/.claude.settings" 2>/dev/null || true
