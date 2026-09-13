@@ -407,10 +407,10 @@ func TestLandingMenuModel(t *testing.T) {
 
 func TestLandingPresetScreen(t *testing.T) {
 	m := newLandingModel()
-	m.info = landingInfo{} // deterministic: no policy on the machine
-	m.cursor = 3           // Create a policy
+	m.cursor = 3 // Create a policy
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(landingModel)
+	m.info = landingInfo{} // deterministic: pretend no policy exists on the machine
 	if m.screen != screenPreset {
 		t.Fatalf("Create a policy should open the preset picker, got screen=%d", m.screen)
 	}
@@ -460,6 +460,13 @@ func TestLandingPresetReplaceFlow(t *testing.T) {
 	if m.screen != screenPreset {
 		t.Fatalf("opening the picker should not run anything, got screen=%d", m.screen)
 	}
+	m.info = landingInfo{ // deterministic fixture over the refreshed state
+		Found:      true,
+		PolicyPath: `C:\pol\doupass.yml`,
+		PolicyName: "starter",
+		PresetName: "starter",
+		Rules:      29,
+	}
 	view := m.View()
 	for _, want := range []string{"starter preset", "29 rules", "will run:", "--force"} {
 		if !strings.Contains(view, want) {
@@ -493,6 +500,25 @@ func TestLandingPresetReplaceFlow(t *testing.T) {
 	}
 	if !strings.Contains(m.runTitle, "--force") || !strings.Contains(m.runTitle, "--dir") {
 		t.Fatalf("replace should run init --force --dir, got %q", m.runTitle)
+	}
+}
+
+func TestLandingPresetStaleInfoRechecked(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	m := newLandingModel()
+	m.info = landingInfo{} // screen loaded before any policy existed
+	m.screen = screenPreset
+	if err := os.WriteFile(filepath.Join(dir, "doupass.yml"), []byte("version: \"0.1\"\nname: custom\nrules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenPreset || !m.confirmReplace {
+		t.Fatalf("enter on a stale screen with a new policy should arm the replace, got screen=%d armed=%v", m.screen, m.confirmReplace)
+	}
+	if !m.info.Found || m.info.PolicyPath == "" {
+		t.Fatalf("info should have been refreshed, got found=%v path=%q", m.info.Found, m.info.PolicyPath)
 	}
 }
 

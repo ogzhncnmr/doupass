@@ -253,6 +253,7 @@ func (m landingModel) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenPreset
 			m.presetIdx = 0
 			m.confirmReplace = false
+			m.info = landingInfoData()
 			return m, nil
 		}
 		return m.startRun(choice.Args)
@@ -317,6 +318,14 @@ func (m landingModel) presetArgs(preset string) []string {
 
 func (m landingModel) runPreset() (tea.Model, tea.Cmd) {
 	name := presetOptions[m.presetIdx].Name
+	if !m.info.Found {
+		// The screen may have been open while a policy appeared (another
+		// terminal, a previous run of the picker); re-check so we never fire
+		// a blind init at an existing file.
+		if _, err := os.Stat("doupass.yml"); err == nil {
+			m.info = landingInfoData()
+		}
+	}
 	if m.info.Found && !m.confirmReplace {
 		m.confirmReplace = true
 		return m, nil
