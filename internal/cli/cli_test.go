@@ -407,24 +407,92 @@ func TestLandingMenuModel(t *testing.T) {
 
 func TestLandingPresetScreen(t *testing.T) {
 	m := newLandingModel()
-	m.cursor = 3 // Create a policy
+	m.info = landingInfo{} // deterministic: no policy on the machine
+	m.cursor = 3           // Create a policy
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(landingModel)
 	if m.screen != screenPreset {
 		t.Fatalf("Create a policy should open the preset picker, got screen=%d", m.screen)
 	}
 	view := m.View()
-	for _, want := range []string{"starter", "minimal", "locked-down", "red-team", "will run:", "esc back"} {
+	for _, want := range []string{"starter", "minimal", "locked-down", "red-team", "will run:", "esc back", "none yet", "1-4 pick", "rules"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("preset view missing %q:\n%s", want, view)
 		}
 	}
+	t.Logf("\n%s", view)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(landingModel)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(landingModel)
 	if m.screen != screenRunning || m.runTitle != "doupass init --preset minimal" {
 		t.Fatalf("preset enter should run init, got screen=%d title=%q", m.screen, m.runTitle)
+	}
+}
+
+func TestLandingPresetDigitPick(t *testing.T) {
+	m := newLandingModel()
+	m.info = landingInfo{}
+	m.screen = screenPreset
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	m = updated.(landingModel)
+	if m.presetIdx != 2 {
+		t.Fatalf("digit 3 should select locked-down, got presetIdx=%d", m.presetIdx)
+	}
+	view := m.View()
+	if !strings.Contains(view, "locked-down") {
+		t.Fatalf("view missing highlighted preset:\n%s", view)
+	}
+}
+
+func TestLandingPresetReplaceFlow(t *testing.T) {
+	m := newLandingModel()
+	m.info = landingInfo{
+		Found:      true,
+		PolicyPath: `C:\pol\doupass.yml`,
+		PolicyName: "starter",
+		PresetName: "starter",
+		Rules:      29,
+	}
+	m.cursor = 3
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenPreset {
+		t.Fatalf("opening the picker should not run anything, got screen=%d", m.screen)
+	}
+	view := m.View()
+	for _, want := range []string{"starter preset", "29 rules", "will run:", "--force"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("replace view missing %q:\n%s", want, view)
+		}
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenPreset || !m.confirmReplace {
+		t.Fatalf("first enter on an existing policy should arm the replace, got screen=%d armed=%v", m.screen, m.confirmReplace)
+	}
+	if view := m.View(); !strings.Contains(view, "replace it with starter") {
+		t.Fatalf("armed view missing the replace warning:\n%s", view)
+	} else {
+		t.Logf("\n%s", view)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(landingModel)
+	if m.confirmReplace {
+		t.Fatal("esc should cancel the armed replace")
+	}
+	if m.screen != screenPreset {
+		t.Fatalf("esc should cancel without leaving the picker, got screen=%d", m.screen)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(landingModel)
+	if m.screen != screenRunning {
+		t.Fatalf("second enter should run the replace, got screen=%d", m.screen)
+	}
+	if !strings.Contains(m.runTitle, "--force") || !strings.Contains(m.runTitle, "--dir") {
+		t.Fatalf("replace should run init --force --dir, got %q", m.runTitle)
 	}
 }
 

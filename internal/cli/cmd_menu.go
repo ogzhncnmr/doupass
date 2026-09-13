@@ -32,7 +32,7 @@ var landingChoices = []landingChoice{
 	{Label: "Show status", Description: "Policy, audit log, and integrations at a glance", Args: []string{"doctor"}},
 	{Label: "Preview setup", Description: "See what would be wired, touch nothing", Args: []string{"setup", "--dry-run"}},
 	{Label: "Apply setup", Description: "Wire the tools installed on this machine", Args: []string{"setup"}},
-	{Label: "Create a policy", Description: "Pick a ready-made doupass.yml, zero writing", Args: nil},
+	{Label: "Create a policy", Description: "Pick or replace a ready-made doupass.yml, zero writing", Args: nil},
 	{Label: "Recent agent activity", Description: "Last 20 audit entries", Args: []string{"log", "tail"}},
 	{Label: "Verify audit log", Description: "Check the hash chain for tampering", Args: []string{"log", "verify"}},
 	{Label: "Full help", Description: "Every command and flag", Args: []string{"help"}},
@@ -71,10 +71,50 @@ var presetOptions = []presetOption{
 	{"red-team", "permissive but logs exfiltration patterns for review"},
 }
 
+var presetRuleCounts = buildPresetRuleCounts()
+
+func buildPresetRuleCounts() map[string]int {
+	counts := make(map[string]int, len(presetNames))
+	for _, name := range presetNames {
+		counts[name] = 0
+		data, err := presetsFS.ReadFile("presets/" + name + ".yml")
+		if err != nil {
+			continue
+		}
+		p, err := policy.Parse(data)
+		if err != nil {
+			continue
+		}
+		counts[name] = len(p.Rules)
+	}
+	return counts
+}
+
+// matchingPreset reports which embedded preset a policy file is byte-identical
+// to (CRLF-normalized), or "" when the policy was edited or written by hand.
+func matchingPreset(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	norm := bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
+	for _, name := range presetNames {
+		data, err := presetsFS.ReadFile("presets/" + name + ".yml")
+		if err != nil {
+			continue
+		}
+		if bytes.Equal(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), norm) {
+			return name
+		}
+	}
+	return ""
+}
+
 type landingInfo struct {
 	Version      string
 	PolicyPath   string
 	PolicyName   string
+	PresetName   string
 	Rules        int
 	LintIssues   int
 	Found        bool
@@ -93,14 +133,15 @@ type landingModel struct {
 	width   int
 	height  int
 
-	screen    landingScreen
-	presetIdx int
-	runTitle  string
-	runID     int
-	spinner   int
-	output    []string
-	runErr    string
-	scroll    int
+	screen         landingScreen
+	presetIdx      int
+	confirmReplace bool
+	runTitle       string
+	runID          int
+	spinner        int
+	output         []string
+	runErr         string
+	scroll         int
 }
 
 func newLandingModel() landingModel {
@@ -157,6 +198,7 @@ func (m landingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runErr = msg.errTxt
 		m.scroll = 0
 		m.screen = screenOutput
+		m.confirmReplace = false
 		m.info = landingInfoData()
 		return m, nil
 	case tea.KeyMsg:
@@ -210,6 +252,7 @@ func (m landingModel) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if choice.Label == "Create a policy" {
 			m.screen = screenPreset
 			m.presetIdx = 0
+			m.confirmReplace = false
 			return m, nil
 		}
 		return m.startRun(choice.Args)
@@ -222,15 +265,63 @@ func (m landingModel) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m landingModel) updatePreset(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "up", "k":
+		m.confirmReplace = false
 		m.presetIdx = (m.presetIdx + len(presetOptions) - 1) % len(presetOptions)
 	case "down", "j":
+		m.confirmReplace = false
 		m.presetIdx = (m.presetIdx + 1) % len(presetOptions)
 	case "enter":
-		return m.startRun([]string{"init", "--preset", presetOptions[m.presetIdx].Name})
+		return m.runPreset()
 	case "esc", "q":
+		if m.confirmReplace {
+			m.confirmReplace = false
+			return m, nil
+		}
 		m.screen = screenMenu
+	default:
+		if n := digitPressed(msg); n >= 1 && n <= len(presetOptions) {
+			m.confirmReplace = false
+			m.presetIdx = n - 1
+		}
 	}
 	return m, nil
+}
+
+func digitPressed(msg tea.KeyMsg) int {
+	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 {
+		return 0
+	}
+	r := msg.Runes[0]
+	if r < '1' || r > '9' {
+		return 0
+	}
+	return int(r - '0')
+}
+
+// presetTargetPath is the file the selected preset would write: the existing
+// policy when there is one, ./doupass.yml otherwise.
+func (m landingModel) presetTargetPath() string {
+	if m.info.Found && m.info.PolicyPath != "" {
+		return m.info.PolicyPath
+	}
+	return "./doupass.yml"
+}
+
+func (m landingModel) presetArgs(preset string) []string {
+	args := []string{"init", "--preset", preset}
+	if m.info.Found && m.info.PolicyPath != "" {
+		return append(args, "--force", "--dir", filepath.Dir(m.info.PolicyPath))
+	}
+	return args
+}
+
+func (m landingModel) runPreset() (tea.Model, tea.Cmd) {
+	name := presetOptions[m.presetIdx].Name
+	if m.info.Found && !m.confirmReplace {
+		m.confirmReplace = true
+		return m, nil
+	}
+	return m.startRun(m.presetArgs(name))
 }
 
 func (m *landingModel) startRun(args []string) (tea.Model, tea.Cmd) {
@@ -335,13 +426,30 @@ func (m landingModel) menuView() string {
 }
 
 func (m landingModel) presetView() string {
-	rowWidth := len("Choose a ready-made policy") + 4
 	highlight := lipgloss.NewStyle().Background(landingAccent).Foreground(lipgloss.Color("16")).Bold(true)
 
 	lines := []string{
 		titleStyle.Render("◆ doupass") + dimStyle.Render(" · choose a ready-made policy"),
 		dividerMark,
 	}
+	switch {
+	case m.info.Invalid:
+		lines = append(lines, " "+stateGlyph("fail")+" "+dimStyle.Render("current policy: invalid YAML · ")+truncateMiddle(m.presetTargetPath(), 56))
+	case !m.info.Found:
+		lines = append(lines, " "+stateGlyph("skip")+" "+dimStyle.Render("current policy: none yet — a preset below writes one instantly"))
+	default:
+		name := m.info.PolicyName
+		switch {
+		case m.info.PresetName != "":
+			name = m.info.PresetName + " preset"
+		case name == "":
+			name = "custom"
+		}
+		lines = append(lines, " "+stateGlyph("ok")+" "+dimStyle.Render(fmt.Sprintf("current policy: %s · %s · ", name, plural(m.info.Rules, "rule")))+truncateMiddle(m.presetTargetPath(), 56))
+	}
+	lines = append(lines, dividerMark)
+
+	rowWidth := len("choose a ready-made policy") + 4
 	for i, p := range presetOptions {
 		row := fmt.Sprintf(" %d. %-11s %s", i+1, p.Name, p.Description)
 		rowWidth = max(rowWidth, utf8.RuneCountInString(row))
@@ -351,8 +459,29 @@ func (m landingModel) presetView() string {
 			lines = append(lines, " "+padRight(p.Name, 11)+dimStyle.Render("  "+p.Description))
 		}
 	}
-	lines = append(lines, "", " "+dimStyle.Render("▶ will run: ")+willStyle.Render("doupass init --preset "+presetOptions[m.presetIdx].Name))
-	return framed(lines, rowWidth, "  ↑/↓ move  ·  enter write policy  ·  esc back")
+
+	sel := presetOptions[m.presetIdx]
+	count := plural(presetRuleCounts[sel.Name], "rule")
+	if m.info.Found && m.confirmReplace {
+		lines = append(lines, "", " "+failStyle.Render(fmt.Sprintf("⚠ %s exists — press enter again to replace it with %s (esc cancels)", m.presetTargetPath(), sel.Name)))
+	} else {
+		lines = append(lines, "", " "+dimStyle.Render("▶ will run: ")+willStyle.Render(displayArgs(m.presetArgs(sel.Name))))
+		lines = append(lines, " "+dimStyle.Render(fmt.Sprintf("%s → %s", count, truncateMiddle(m.presetTargetPath(), 56))))
+	}
+	return framed(lines, rowWidth, "  1-4 pick · ↑/↓ move · enter write policy · esc back")
+}
+
+// displayArgs renders a command line for the "will run" hint, collapsing long
+// absolute paths so the frame stays narrow on Windows.
+func displayArgs(args []string) string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = a
+		if len(a) > 48 && (filepath.IsAbs(a) || strings.HasPrefix(a, "~")) {
+			out[i] = truncateMiddle(a, 48)
+		}
+	}
+	return "doupass " + strings.Join(out, " ")
 }
 
 func (m landingModel) runningView() string {
@@ -546,6 +675,7 @@ func landingInfoData() landingInfo {
 	if policyPath, err := findPolicyFile(""); err == nil {
 		info.Found = true
 		info.PolicyPath = policyPath
+		info.PresetName = matchingPreset(policyPath)
 		if engine, err := loadEngine(policyPath); err != nil {
 			info.Invalid = true
 		} else {
