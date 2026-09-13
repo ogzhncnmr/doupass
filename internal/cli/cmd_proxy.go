@@ -3,6 +3,9 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ogzhncnmr/doupass/internal/audit"
 	"github.com/ogzhncnmr/doupass/internal/policy"
@@ -57,7 +60,12 @@ func newProxyCmd() *cobra.Command {
 					}
 				},
 			}
-			return proxy.Run(cmd.Context(), cfg)
+			// On Ctrl+C the default handler would kill doupass and orphan the
+			// downstream MCP server; routing the signal into the context lets
+			// proxy.Run kill the whole process tree instead.
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return proxy.Run(ctx, cfg)
 		},
 	}
 	cmd.Flags().String("server", "", "MCP server name shown to the policy")

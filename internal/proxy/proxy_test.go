@@ -308,26 +308,71 @@ func TestNonToolCallPassesThrough(t *testing.T) {
 	}
 }
 
-func TestInvalidJSONPassesThrough(t *testing.T) {
-	run := startProxy(t, Config{ServerName: "fs", Engine: newEngine(t, testPolicy)})
+func TestInvalidJSONRejected(t *testing.T) {
+	var got policy.Decision
+	run := startProxy(t, Config{
+		ServerName: "fs",
+		Engine:     newEngine(t, testPolicy),
+		OnDecision: func(_ policy.Call, d policy.Decision) { got = d },
+	})
 	run.send(t, "this is not json")
+	line := readLine(t, run.out)
+	if !strings.Contains(line, "-32700") {
+		t.Fatalf("expected parse error, got %s", line)
+	}
 	if err := run.finish(t); err != nil {
 		t.Fatalf("finish: %v", err)
 	}
-	if run.server.count() != 1 {
-		t.Fatalf("invalid line was not forwarded verbatim")
+	if run.server.count() != 0 {
+		t.Fatalf("unparseable line was forwarded downstream")
+	}
+	if got.Action != policy.ActionDeny {
+		t.Fatalf("decision = %+v, want deny", got)
 	}
 }
 
-func TestUnparseableParamsPassesThrough(t *testing.T) {
+func TestBatchRequestRejected(t *testing.T) {
 	run := startProxy(t, Config{ServerName: "fs", Engine: newEngine(t, testPolicy)})
-	run.send(t, `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":"nope"}`)
+	run.send(t, `[{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_file","arguments":{"path":"/home/dev/.ssh/id_rsa"}}}]`)
 	line := readLine(t, run.out)
-	if !strings.Contains(line, `"result"`) {
-		t.Fatalf("expected forwarded response, got %s", line)
+	if !strings.Contains(line, "-32600") {
+		t.Fatalf("expected invalid request error for batch, got %s", line)
 	}
 	if err := run.finish(t); err != nil {
 		t.Fatalf("finish: %v", err)
+	}
+	if run.server.count() != 0 {
+		t.Fatal("batch message was forwarded downstream")
+	}
+}
+
+func TestMissingToolNameRejected(t *testing.T) {
+	run := startProxy(t, Config{ServerName: "fs", Engine: newEngine(t, testPolicy)})
+	run.send(t, `{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{}}`)
+	line := readLine(t, run.out)
+	if !strings.Contains(line, "-32602") {
+		t.Fatalf("expected invalid params error, got %s", line)
+	}
+	if err := run.finish(t); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	if run.server.count() != 0 {
+		t.Fatal("nameless tools/call was forwarded downstream")
+	}
+}
+
+func TestNonObjectArgumentsRejected(t *testing.T) {
+	run := startProxy(t, Config{ServerName: "fs", Engine: newEngine(t, testPolicy)})
+	run.send(t, `{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"read_file","arguments":"nope"}}`)
+	line := readLine(t, run.out)
+	if !strings.Contains(line, "-32602") {
+		t.Fatalf("expected invalid params error, got %s", line)
+	}
+	if err := run.finish(t); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	if run.server.count() != 0 {
+		t.Fatal("call with non-object arguments was forwarded downstream")
 	}
 }
 

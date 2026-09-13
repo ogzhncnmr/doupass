@@ -21,6 +21,9 @@ const (
 	defaultMaxMessageBytes   = 10 << 20
 	deniedErrorCode          = -32001
 	protocolErrorCode        = -32002
+	invalidParamsErrorCode   = -32602
+	invalidRequestErrorCode  = -32600
+	parseErrorCode           = -32700
 	defaultAskTimeoutSeconds = 60
 )
 
@@ -93,15 +96,20 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	configureProcess(cmd)
+	pg := newProcessGroup()
+	defer pg.close()
+	pg.configure(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+	if err := pg.attach(cmd); err != nil {
+		pg.detach()
 	}
 	done := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
-			killTree(cmd)
+			pg.kill(cmd)
 		case <-done:
 		}
 	}()
@@ -178,9 +186,12 @@ func RunIO(ctx context.Context, cfg Config, harnessIn io.Reader, harnessOut io.W
 }
 
 func handleMessage(ctx context.Context, cfg *Config, out io.Writer, line []byte) ([]byte, bool) {
+	if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && trimmed[0] == '[' {
+		return cfg.reject(out, nil, invalidRequestErrorCode, "batch requests are not supported over stdio; message not forwarded")
+	}
 	var msg rpcMessage
 	if err := json.Unmarshal(line, &msg); err != nil {
-		return line, true
+		return cfg.reject(out, nil, parseErrorCode, "unparseable JSON-RPC message not forwarded: "+err.Error())
 	}
 	if msg.Method != "tools/call" {
 		return line, true
@@ -188,8 +199,11 @@ func handleMessage(ctx context.Context, cfg *Config, out io.Writer, line []byte)
 	var params callParams
 	if len(msg.Params) > 0 {
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return line, true
+			return cfg.reject(out, msg.ID, invalidParamsErrorCode, "unparseable tools/call params not forwarded: "+err.Error())
 		}
+	}
+	if params.Name == "" {
+		return cfg.reject(out, msg.ID, invalidParamsErrorCode, "tools/call without a tool name not forwarded")
 	}
 
 	call := policy.Call{
@@ -222,6 +236,17 @@ func handleMessage(ctx context.Context, cfg *Config, out io.Writer, line []byte)
 		writeRPCError(out, msg.ID, deniedErrorCode, denyMessage(cfg.ServerName, params.Name, dec))
 		return nil, false
 	}
+}
+
+// reject fails closed on messages the engine cannot evaluate: the caller gets
+// a JSON-RPC error and the message is never forwarded downstream.
+func (cfg *Config) reject(out io.Writer, id json.RawMessage, code int, reason string) ([]byte, bool) {
+	if cfg.OnDecision != nil {
+		call := policy.Call{Surface: "mcp", Server: cfg.ServerName, Tool: "<unforwarded>"}
+		cfg.OnDecision(call, policy.Decision{Action: policy.ActionDeny, Reason: reason})
+	}
+	writeRPCError(out, id, code, "doupass: "+reason)
+	return nil, false
 }
 
 func denyMessage(server, tool string, dec policy.Decision) string {

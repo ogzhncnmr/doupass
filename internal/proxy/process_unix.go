@@ -7,13 +7,21 @@ import (
 	"syscall"
 )
 
-func configureProcess(cmd *exec.Cmd) {
+type processGroup struct{}
+
+func newProcessGroup() *processGroup { return &processGroup{} }
+
+func (g *processGroup) configure(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func killTree(cmd *exec.Cmd) {
+func (g *processGroup) attach(_ *exec.Cmd) error { return nil }
+
+func (g *processGroup) kill(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
 	}
 	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 }
+
+func (g *processGroup) close() {}
