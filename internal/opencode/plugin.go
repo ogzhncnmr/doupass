@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ogzhncnmr/doupass/internal/fsutil"
 )
 
 const pluginMarker = "managed by doupass"
@@ -31,7 +33,7 @@ func InstallPlugin(pluginPath, binary string) (PluginResult, error) {
 		return PluginResult{Path: pluginPath}, err
 	}
 	//#nosec G306 -- plugin file contains no secrets; 0600 keeps it user-owned
-	if err := os.WriteFile(pluginPath, []byte(renderPlugin(binary)), 0o600); err != nil {
+	if err := fsutil.WriteFileAtomic(pluginPath, []byte(renderPlugin(binary)), 0o600); err != nil {
 		return PluginResult{Path: pluginPath}, err
 	}
 	return PluginResult{Path: pluginPath, Changed: true}, nil

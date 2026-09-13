@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ogzhncnmr/doupass/internal/fsutil"
 )
 
 const hookMarker = "doupass hook"
@@ -124,14 +126,15 @@ func writeSettings(path string, settings map[string]any, original []byte, change
 	out = append(out, '\n')
 	if len(original) > 0 {
 		backup := path + ".doupass.bak"
-		if err := os.WriteFile(backup, original, 0o600); err == nil {
-			res.Backup = backup
+		if err := os.WriteFile(backup, original, 0o600); err != nil {
+			return res, fmt.Errorf("claude: backup %s: %w", backup, err)
 		}
+		res.Backup = backup
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return res, err
 	}
-	if err := os.WriteFile(path, out, 0o600); err != nil {
+	if err := fsutil.WriteFileAtomic(path, out, 0o600); err != nil {
 		return res, err
 	}
 	res.Changed = true

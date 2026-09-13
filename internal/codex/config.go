@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/ogzhncnmr/doupass/internal/fsutil"
 )
 
 const marker = "doupass"
@@ -113,7 +115,7 @@ func mutate(path string, wrap bool) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	if err := os.WriteFile(path, out, mode); err != nil {
+	if err := fsutil.WriteFileAtomic(path, out, mode); err != nil {
 		return res, err
 	}
 	return Result{Changed: true, Servers: changed, Backup: backup, Path: path}, nil

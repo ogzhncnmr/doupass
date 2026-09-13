@@ -27,7 +27,7 @@ func newInitCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("unknown preset %q (available: %s)", preset, strings.Join(presetNames, ", "))
 			}
-			target := filepath.Join(dir, "doupass.yml")
+			target := filepath.Join(expandHome(dir), "doupass.yml")
 			if _, err := os.Stat(target); err == nil && !force {
 				return fmt.Errorf("%s already exists (use --force to overwrite)", target)
 			}

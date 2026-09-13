@@ -13,7 +13,8 @@ func newLogCmd() *cobra.Command {
 		Use:   "log",
 		Short: "Inspect the audit log",
 	}
-	cmd.PersistentFlags().String("path", "", "audit log path (default: ~/.doupass/audit.jsonl)")
+	cmd.PersistentFlags().String("path", "", "audit log path (default: the policy audit.path or ~/.doupass/audit.jsonl)")
+	cmd.PersistentFlags().String("policy", "", "policy file (default: ./doupass.yml or ~/.doupass/doupass.yml)")
 	cmd.AddCommand(newLogTailCmd(), newLogVerifyCmd())
 	return cmd
 }
@@ -23,7 +24,27 @@ func auditPath(cmd *cobra.Command) string {
 	if p != "" {
 		return expandHome(p)
 	}
+	if fromPolicy, ok := policyAuditPath(cmd); ok {
+		return fromPolicy
+	}
 	return filepath.Join(homeDir(), ".doupass", "audit.jsonl")
+}
+
+func policyAuditPath(cmd *cobra.Command) (string, bool) {
+	policyFlag, _ := cmd.Flags().GetString("policy")
+	policyPath, err := findPolicyFile(policyFlag)
+	if err != nil {
+		return "", false
+	}
+	engine, err := loadEngine(policyPath)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "doupass: cannot read audit path from %s: %v\n", policyPath, err)
+		return "", false
+	}
+	if p := engine.Policy.Audit.Path; p != "" {
+		return expandHome(p), true
+	}
+	return "", false
 }
 
 func newLogTailCmd() *cobra.Command {
