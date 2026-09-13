@@ -15,7 +15,7 @@ Status: v0.1-rc. The core engine, MCP proxy, Claude Code hook, audit log, CLI, a
 ```sh
 go install github.com/ogzhncnmr/doupass/cmd/doupass@latest   # Go 1.27+
 
-doupass init                                                  # starter preset (18 rules)
+doupass init                                                  # starter preset (29 rules)
 doupass init --preset locked-down                             # or: minimal, red-team
 doupass policy lint doupass.yml                               # catch blanket rules and missing reasons
 doupass policy test doupass.yml --tool Read --arg file_path=~/.ssh/id_rsa

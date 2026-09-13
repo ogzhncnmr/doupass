@@ -10,13 +10,13 @@ doupass version
 ## 2. Create a policy
 
 ```sh
-doupass init            # starter preset (18 rules)
+doupass init            # starter preset (29 rules)
 doupass init --preset locked-down
 doupass init --preset minimal
 doupass init --preset red-team
 ```
 
-Presets: `starter`, `minimal`, `locked-down`, `red-team`. Full starter packs live in `rules/` (see `rules/packs/` for community policies).
+Presets: `starter`, `minimal`, `locked-down`, `red-team`. To update an existing policy with a preset, rerun the picker in the interactive menu (or add `--force` to the command). Full starter packs live in `rules/` (see `rules/packs/` for community policies).
 
 ## 3. Dry-run decisions
 
