@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -251,25 +252,35 @@ func maskArgs(args map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(args))
 	for k, v := range args {
-		if isSensitiveKey(k) {
-			out[k] = "***"
-			continue
-		}
-		switch x := v.(type) {
-		case nil:
-			out[k] = nil
-		case string:
-			out[k] = truncate(x)
-		default:
-			data, err := json.Marshal(x)
-			if err != nil {
-				out[k] = "[unserializable]"
-				continue
-			}
-			out[k] = truncate(string(data))
-		}
+		out[k] = maskValue(k, v)
 	}
 	return out
+}
+
+func maskValue(key string, v any) any {
+	if isSensitiveKey(key) {
+		return "***"
+	}
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case string:
+		return truncate(maskCredentialURLs(x))
+	case map[string]any:
+		return maskArgs(x)
+	case []any:
+		out := make([]any, len(x))
+		for i, el := range x {
+			out[i] = maskValue("", el)
+		}
+		return out
+	default:
+		data, err := json.Marshal(x)
+		if err != nil {
+			return "[unserializable]"
+		}
+		return truncate(string(data))
+	}
 }
 
 func isSensitiveKey(k string) bool {
@@ -277,7 +288,10 @@ func isSensitiveKey(k string) bool {
 	if strings.HasSuffix(lk, "key") {
 		return true
 	}
-	for _, s := range []string{"password", "passwd", "secret", "token", "credential"} {
+	for _, s := range []string{
+		"password", "passwd", "secret", "token", "credential",
+		"authorization", "cookie", "bearer", "private", "signature", "session",
+	} {
 		if strings.Contains(lk, s) {
 			return true
 		}
@@ -285,9 +299,22 @@ func isSensitiveKey(k string) bool {
 	return false
 }
 
+// credentialedURL matches scheme://userinfo@ so "https://user:pass@host" never
+// lands in the log verbatim; userinfo is masked as a whole because a bare
+// userinfo (user@host) is often the token itself.
+var credentialedURL = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.-]*)://[^/\s@<>"']+@`)
+
+func maskCredentialURLs(s string) string {
+	return credentialedURL.ReplaceAllString(s, "$1://***@")
+}
+
 func truncate(s string) string {
 	if len(s) <= maxArgValueRunes {
 		return s
 	}
-	return s[:maxArgValueRunes]
+	runes := []rune(s)
+	if len(runes) <= maxArgValueRunes {
+		return s
+	}
+	return string(runes[:maxArgValueRunes])
 }

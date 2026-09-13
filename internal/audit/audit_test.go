@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ogzhncnmr/doupass/internal/policy"
 )
@@ -79,8 +80,60 @@ func TestMaskingAndTruncation(t *testing.T) {
 	if got := entries[0].Args["command"].(string); len(got) != 256 {
 		t.Fatalf("command truncated to %d, want 256", len(got))
 	}
-	if entries[0].Args["list"] != `["a","b"]` {
-		t.Fatalf("list arg = %v", entries[0].Args["list"])
+	list, ok := entries[0].Args["list"].([]any)
+	if !ok || len(list) != 2 || list[0] != "a" || list[1] != "b" {
+		t.Fatalf("list arg = %#v", entries[0].Args["list"])
+	}
+}
+
+func TestNestedMasking(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	l := &Logger{Path: path}
+	call := policy.Call{
+		Tool: "http_request",
+		Args: map[string]any{
+			"env": map[string]any{
+				"API_TOKEN": "super-secret-token",
+				"HOME":      "/home/dev",
+				"nested":    map[string]any{"client_secret": "deep"},
+			},
+			"headers": map[string]any{
+				"Authorization": "Bearer abc123",
+				"Content-Type":  "application/json",
+			},
+			"cookies": "sessionid=xyz",
+			"url":     "https://user:hunter2@example.com/path?x=1",
+			"urls":    []any{"https://tok@files.example.com/a", "https://plain.example.com/b"},
+		},
+	}
+	if err := l.Append(call, policy.Decision{Action: policy.ActionAllow}); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	text := string(data)
+	for _, leak := range []string{"super-secret-token", "Bearer abc123", "hunter2", "sessionid=xyz", "tok@", "deep"} {
+		if strings.Contains(text, leak) {
+			t.Fatalf("nested secret %q leaked into the audit log", leak)
+		}
+	}
+	for _, want := range []string{`"/home/dev"`, `"application/json"`, "https://***@example.com", "https://***@files.example.com", "https://plain.example.com/b"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %s in log, got %s", want, text)
+		}
+	}
+}
+
+func TestTruncateKeepsUTF8Valid(t *testing.T) {
+	long := strings.Repeat("şğü", 300)
+	got := truncate(long)
+	if len([]rune(got)) != maxArgValueRunes {
+		t.Fatalf("truncated to %d runes, want %d", len([]rune(got)), maxArgValueRunes)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatal("truncation produced invalid UTF-8")
+	}
+	if masked := maskCredentialURLs("see https://user:pass@host.example/x and ftp://tok@other/y"); strings.Contains(masked, "user:pass") || strings.Contains(masked, "tok@") {
+		t.Fatalf("URL credentials not masked: %s", masked)
 	}
 }
 

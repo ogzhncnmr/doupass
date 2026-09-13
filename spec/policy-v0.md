@@ -130,7 +130,7 @@ When `audit.path` is set, every decision is appended as one JSON object per line
  "prev_hash":"0000...","hash":"9f86..."}
 ```
 
-- Argument values are truncated (256 chars) and values under sensitive keys (`password`, `token`, `secret`, anything ending in `key`) are replaced with `"***"`.
+- Argument values are truncated to 256 characters (without splitting UTF-8 runes) and masked recursively: values under sensitive keys (`password`, `token`, `secret`, `authorization`, `cookie`, anything ending in `key`) become `"***"` at every depth, and credentials embedded in URLs (`https://user:pass@host`) are masked wherever they appear.
 - With `audit.hash_chain: true`, each entry's `hash` is the SHA-256 of the canonical JSON of the entry (with `hash` empty) and includes the previous entry's hash, making the log tamper-evident.
 - The log is local evidence only: it is tamper-evident, not tamper-proof.
 
