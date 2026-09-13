@@ -27,6 +27,42 @@ rules:
     action: log
     reason: "Network egress is recorded"
 
+  - id: log-wget-egress
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*wget*"
+    action: log
+    reason: "Network egress is recorded"
+
+  - id: log-base64-pipe
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:.*\|\s*base64\b.*
+    action: log
+    reason: "Encoding data through a pipe is recorded"
+
+  - id: log-remote-copy
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:.*\b(scp|sftp|rsync)\b.*\b\w+@[\w.-]+:.*
+    action: log
+    reason: "Outbound file transfers are recorded"
+
+  - id: log-env-dump
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:^\s*(env|printenv)\s*$
+    action: log
+    reason: "Full environment dumps are recorded"
+
   - id: ask-destructive
     match:
       surface: hook

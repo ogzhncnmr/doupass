@@ -15,8 +15,15 @@ func TestPresetsAreValid(t *testing.T) {
 		if err != nil {
 			t.Fatalf("preset %s: %v", name, err)
 		}
-		if _, err := policy.Parse(data); err != nil {
+		p, err := policy.Parse(data)
+		if err != nil {
 			t.Fatalf("preset %s: %v", name, err)
+		}
+		if len(p.Rules) == 0 {
+			t.Fatalf("preset %s has no rules", name)
+		}
+		if presetRuleCounts[name] != len(p.Rules) {
+			t.Fatalf("preset %s rule count cache = %d, want %d", name, presetRuleCounts[name], len(p.Rules))
 		}
 	}
 }

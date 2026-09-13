@@ -18,6 +18,48 @@ rules:
     action: deny
     reason: "SSH credentials are off-limits"
 
+  - id: block-aws-credentials
+    match:
+      args:
+        "*": "**/.aws/**"
+    action: deny
+    reason: "AWS credentials are off-limits"
+
+  - id: block-gcloud-credentials
+    match:
+      args:
+        "*": "**/.config/gcloud/**"
+    action: deny
+    reason: "GCloud credentials are off-limits"
+
+  - id: block-kubeconfig
+    match:
+      args:
+        "*": "**/.kube/config"
+    action: deny
+    reason: "Kubernetes credentials are off-limits"
+
+  - id: block-git-credentials
+    match:
+      args:
+        "*": "**/.git-credentials"
+    action: deny
+    reason: "Stored git credentials are off-limits"
+
+  - id: block-npmrc
+    match:
+      args:
+        "*": "**/.npmrc"
+    action: deny
+    reason: "npm tokens are off-limits"
+
+  - id: block-netrc
+    match:
+      args:
+        "*": "**/.netrc"
+    action: deny
+    reason: "Stored FTP/HTTP credentials are off-limits"
+
   - id: block-env-files
     match:
       args:

@@ -32,6 +32,13 @@ rules:
     action: deny
     reason: "GCloud credentials are off-limits"
 
+  - id: block-azure-credentials
+    match:
+      args:
+        "*": "**/.azure/**"
+    action: deny
+    reason: "Azure credentials are off-limits"
+
   - id: block-kubeconfig
     match:
       args:
@@ -60,6 +67,48 @@ rules:
     action: deny
     reason: "npm tokens are off-limits"
 
+  - id: block-netrc
+    match:
+      args:
+        "*": "**/.netrc"
+    action: deny
+    reason: "Stored FTP/HTTP credentials are off-limits"
+
+  - id: block-gnupg
+    match:
+      args:
+        "*": "**/.gnupg/**"
+    action: deny
+    reason: "PGP private keys are off-limits"
+
+  - id: block-password-store
+    match:
+      args:
+        "*": "**/.password-store/**"
+    action: deny
+    reason: "Password stores are off-limits"
+
+  - id: block-terraform-state
+    match:
+      args:
+        "*": "**/*.tfstate*"
+    action: deny
+    reason: "Terraform state may contain secrets"
+
+  - id: block-private-key-rsa
+    match:
+      args:
+        "*": "**/id_rsa"
+    action: deny
+    reason: "Private keys must stay in ~/.ssh"
+
+  - id: block-private-key-ed25519
+    match:
+      args:
+        "*": "**/id_ed25519"
+    action: deny
+    reason: "Private keys must stay in ~/.ssh"
+
   - id: block-env-files
     match:
       args:
@@ -82,6 +131,15 @@ rules:
         command: "*rm -rf /*"
     action: deny
     reason: "Refusing recursive delete of root paths"
+
+  - id: deny-gh-auth-token
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: "*gh auth token*"
+    action: deny
+    reason: "GitHub CLI tokens must not be read by agents"
 
   - id: ask-rm-recursive
     match:
@@ -119,6 +177,24 @@ rules:
     action: ask
     reason: "POSTing data with curl can exfiltrate files"
 
+  - id: ask-curl-pipe-shell
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:.*(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z|da|fi|k)?sh\b.*
+    action: ask
+    reason: "Piping a download straight into a shell runs unverified code"
+
+  - id: ask-remote-copy
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:.*\b(scp|sftp|rsync)\b.*\b\w+@[\w.-]+:.*
+    action: ask
+    reason: "Outbound file transfers need confirmation"
+
   - id: ask-base64-pipe
     match:
       surface: hook
@@ -127,6 +203,15 @@ rules:
         command: re:.*\|\s*base64\b.*
     action: ask
     reason: "Encoding data through a pipe is a common exfiltration step"
+
+  - id: ask-npm-publish
+    match:
+      surface: hook
+      tool: Bash
+      args:
+        command: re:.*\b(npm|yarn|pnpm|bun)\s+publish\b.*
+    action: ask
+    reason: "Publishing a package is effectively irreversible"
 
   - id: deny-drop-table
     match:
