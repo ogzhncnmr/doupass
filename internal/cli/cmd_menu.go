@@ -93,6 +93,7 @@ func buildPresetRuleCounts() map[string]int {
 // matchingPreset reports which embedded preset a policy file is byte-identical
 // to (CRLF-normalized), or "" when the policy was edited or written by hand.
 func matchingPreset(path string) string {
+	//#nosec G304 -- path is the policy file selected by the local user
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""

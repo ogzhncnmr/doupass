@@ -27,6 +27,7 @@ func newProcessGroup() *processGroup {
 			LimitFlags: windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 		},
 	}
+	//#nosec G103 -- the uintptr conversion is required by the SetInformationJobObject Win32 signature
 	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
 		_ = windows.CloseHandle(job)
 		return g
@@ -41,6 +42,7 @@ func (g *processGroup) attach(cmd *exec.Cmd) error {
 	if g.job == 0 || cmd.Process == nil {
 		return nil
 	}
+	//#nosec G115 -- Windows PIDs are unsigned 32-bit by definition
 	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
 	if err != nil {
 		return err

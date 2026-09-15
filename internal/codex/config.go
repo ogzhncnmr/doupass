@@ -51,6 +51,7 @@ func HasWrappers(path string) bool {
 
 func mutate(path string, wrap bool) (Result, error) {
 	res := Result{Path: path}
+	//#nosec G304 -- path is the Codex config.toml selected by the local user
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return res, err
@@ -108,6 +109,7 @@ func mutate(path string, wrap bool) (Result, error) {
 	if fi, statErr := os.Stat(path); statErr == nil {
 		mode = fi.Mode()
 	}
+	//#nosec G703 -- backup path derives from the user-selected config path
 	if err := os.WriteFile(backup, data, mode); err != nil {
 		return res, fmt.Errorf("write backup: %w", err)
 	}
@@ -122,6 +124,7 @@ func mutate(path string, wrap bool) (Result, error) {
 }
 
 func loadDoc(path string) (map[string]any, error) {
+	//#nosec G304 -- path is the Codex config.toml selected by the local user
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
