@@ -1,0 +1,2 @@
+go test fuzz v1
+string("re:^(go build|go vet|npm run build)\b.*")
