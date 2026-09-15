@@ -73,6 +73,7 @@ func renderPlugin(binary string) string {
 import { writeFileSync, unlinkSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { execFileSync } from "node:child_process"
 
 const BINARY = "` + binaryLiteral + `"
 
@@ -92,7 +93,7 @@ function normalizeArgs(args) {
   return out
 }
 
-export const DoupassPlugin = async ({ $ }) => {
+export const DoupassPlugin = async () => {
   return {
     "tool.execute.before": async (input, output) => {
       const payload = JSON.stringify({
@@ -104,8 +105,11 @@ export const DoupassPlugin = async ({ $ }) => {
       let decision
       try {
         writeFileSync(file, payload)
-        const text = await $` + "`" + `${BINARY} decide --input ${file}` + "`" + `.quiet().text()
-        decision = JSON.parse(text)
+        const stdout = execFileSync(BINARY, ["decide", "--input", file], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        })
+        decision = JSON.parse(stdout)
       } catch (err) {
         throw new Error("doupass: policy decision failed (fail-closed): " + err)
       } finally {
